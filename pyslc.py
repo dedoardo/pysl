@@ -3,6 +3,7 @@ import sys
 import hlsl
 import pysl
 import json
+import copy
 
 # Helpers
 #-------------------------------------------------------------------------------
@@ -38,6 +39,8 @@ class Assignment:
 class Metadata:
     _JSON = None
     _ROOT = None
+    
+    objects = { }
 
     @staticmethod
     def init(metadata_path : str):
@@ -49,6 +52,7 @@ class Metadata:
         Metadata._ROOT = { }
         Metadata._ROOT[pysl.Keywords.SamplerStatesKey] = []
         Metadata._ROOT[pysl.Keywords.TexturesKey] = []
+        Metadata._ROOT[pysl.Keywords.ConstantBuffersKey] = []
         return True
 
     @staticmethod
@@ -71,6 +75,17 @@ class Metadata:
             ERR(None, "Invalid function stage: {0}".format(stage))
 
     @staticmethod
+    def constant_buffer_attrs(cbuffer : pysl.ConstantBuffer):
+        cb = { }
+        cb[pysl.Keywords.NameKey] = cbuffer.name
+
+        if cbuffer.enforced_size:
+            cb[pysl.Keywords.SizeKey] = cbuffer.enforced_size
+
+        Metadata._ROOT[pysl.Keywords.ConstantBuffersKey].append(cb)
+        Metadata.objects[cbuffer.name] = copy.deepcopy(cbuffer)
+
+    @staticmethod
     def sampler_state_attrs(sampler_state : pysl.SamplerState):
         state = { }
         state[pysl.Keywords.NameKey] = sampler_state.name
@@ -79,6 +94,7 @@ class Metadata:
             state[key] = val
 
         Metadata._ROOT[pysl.Keywords.SamplerStatesKey].append(state)
+        Metadata.objects[sampler_state.name] = copy.deepcopy(sampler_state)
 
     @staticmethod
     def texture_attrs(texture : pysl.Texture):
@@ -89,6 +105,14 @@ class Metadata:
             t[key] = val
 
         Metadata._ROOT[pysl.Keywords.TexturesKey].append(t)
+        Metadata.objects[texture.name] = copy.deepcopy(texture)
+
+    @staticmethod
+    def find(name : str) -> pysl.Object:
+        try:
+            return Metadata.objects[name]
+        except KeyError:
+            ERR(None, "Failed to find object: {0}. Are you sure you declared it?".format(name))
 
 class Translate:
     @staticmethod
@@ -126,7 +150,11 @@ class Translate:
 
     @staticmethod
     def method_call(caller : str, name : str, args):
-        hlsl.method_call(caller, name, args)
+        obj : pysl.Object = Metadata.find(caller)
+        if obj:
+            hlsl.method_call(obj, name, args)
+        else:
+            ERR(None, "Failed to translate {0}.{1} as the object type couldn't be deduced.".format(caller, name))
 
     @staticmethod
     def constructor(ctype : str, args):
@@ -258,18 +286,29 @@ def TO_INT(node : ast) -> (bool, int):
     ERR(node, "Expected signed integer")
     return (False, 0)
 
-def parse_for_range(node : ast.Call) -> (int, int, int):
+def parse_for_range(node : ast.Call) -> (str, str, str):
     if len(node.args) != 3:
         ERR(node, "Expected 3 integer arguments in range(start, end, stop) found: {0}".format(len(node.args)))
-        return (0, 0, 0)
+        return ('ERR', 'ERR', 'ERR')
     
-    ok1, v1 = TO_INT(node.args[0])
-    ok2, v2 = TO_INT(node.args[1])
-    ok3, v3 = TO_INT(node.args[2])
+    if isinstance(node.args[0], ast.Name):
+        ok1, v1 = True, node.args[0].id
+    else:
+        ok1, v1 = TO_INT(node.args[0])
+
+    if isinstance(node.args[1], ast.Name):
+        ok2, v2 = True, node.args[1].id
+    else:
+        ok2, v2 = TO_INT(node.args[1])   
+
+    if isinstance(node.args[2], ast.Name):
+        ok3, v3 = True, node.args[2].id
+    else:
+        ok3, v3 = TO_INT(node.args[2])
 
     if ok1 and ok2 and ok3:
-        return (v1, v2, v3)
-    return (0, 0, 0)
+        return (str(v1), str(v2), str(v3))
+    return ('ERR', 'ERR', 'ERR')
 
 def unop_str(op : ast.AST) -> str:
     if isinstance(op, ast.UAdd):
@@ -281,13 +320,13 @@ def unop_str(op : ast.AST) -> str:
     if isinstance(op, ast.Invert):
         return '~'
     ERR(op, "Invalid unary operator encountered: {0}:{1}. Check supported intrinsics.".format(op.lineno, op.col_offset))
-    return ' INVALID_UNOP '
+    return 'INVALID_UNOP'
 
 def binop_str(op : ast.AST) -> str:
     if isinstance(op, ast.Add):
-        return ' + '
+        return '+'
     if isinstance(op, ast.Sub):
-        return ' - '
+        return '-'
     if isinstance(op, ast.Mult):
         return '*'
     if isinstance(op, ast.Div):
@@ -305,21 +344,21 @@ def binop_str(op : ast.AST) -> str:
     if isinstance(op, ast.BitAnd):
         return '&'
     ERR(op, "Invalid binary operator encountered: {0}:{1}. Check supported intrinsics.".format(op.lineno, op.col_offset))
-    return ' INVALID_BINOP '
+    return 'INVALID_BINOP'
 
 def cmpop_str(op : ast.AST) -> str:
     if isinstance(op, ast.Eq):
-        return ' == '
+        return '=='
     if isinstance(op, ast.NotEq):
-        return ' != '
+        return '!='
     if isinstance(op, ast.Lt):
-        return ' < '
+        return '<'
     if isinstance(op, ast.LtE):
-        return ' <= '
+        return '<='
     if isinstance(op, ast.Gt):
-        return ' > '
+        return '>'
     if isinstance(op, ast.GtE):
-        return ' >= '
+        return '>='
     ERR(op, "Invalid compare operator encountered: {0}:{1}. Check supported intrisics.".format(op.lineno, op.col_offset))
     return 'INVALID_CMPOP'
 
@@ -467,7 +506,7 @@ def PYSL_eval(node : ast.AST):
 
     elif isinstance(node, ast.BinOp):
         PYSL_eval(node.left)
-        Translate.text(binop_str(node.op))
+        Translate.text(' {0} '.format(binop_str(node.op)))
         PYSL_eval(node.right)
 
     elif isinstance(node, ast.BoolOp):
@@ -485,6 +524,19 @@ def PYSL_eval(node : ast.AST):
         PYSL_eval(node.values[1])
         Translate.text(')')
 
+    elif isinstance(node, ast.Set):
+        Translate.text('{ ')
+        for i in range(len(node.elts)):
+            PYSL_eval(node.elts[i])
+            if i != len(node.elts) -1:
+                Translate.text(', ')
+        Translate.text(' }')
+
+    elif isinstance(node, ast.Subscript):
+        PYSL_eval(node.value)
+        Translate.text('[')
+        PYSL_eval(node.slice)
+        Translate.text(']')
 
     elif isinstance(node, ast.Compare):
         if len(node.ops) > 1 or len(node.comparators) > 1:
@@ -496,6 +548,9 @@ def PYSL_eval(node : ast.AST):
     
     elif isinstance(node, ast.Num):
         Translate.text(str(node.n))
+
+    elif isinstance(node, ast.Index):
+        PYSL_eval(node.value)
 
     elif isinstance(node, ast.Str):
         Translate.text(node.s)
@@ -575,8 +630,13 @@ def PYSL_block(nodes : [ast.AST], indent : int):
             # for i in range(start, end, step) <- signed
             # for (i : uint = start; i [<>] end; step)
             # if step is < 0 -> compare is > and viceversa
-            if isinstance(node.target, ast.Name):
-                pass
+            if isinstance(node.target, ast.Name) and isinstance(node.iter, ast.Call):
+                val = node.iter
+                if val.func.id != 'range' and val.func.id != 'rrange':
+                    ERR(val, "Currently only range-based loops are supported. range(start, end, step).")
+                limits = parse_for_range(val)
+                iters.append((node.target.id, limits[0], limits[1], limits[2], False if val.func.id == 'range' else True))
+                
             elif isinstance(node.target, ast.Tuple):
                 if isinstance(node.iter, ast.Tuple) and len(node.target.elts) == len(node.iter.elts):
                     for i in range(len(node.target.elts)):
@@ -585,15 +645,15 @@ def PYSL_block(nodes : [ast.AST], indent : int):
                         if not isinstance(target, ast.Name) or not isinstance(vals, ast.Call):
                             ERR(node, "Expected Name = Call in {0}-th assignment".format(i))
                             continue
-                        if vals.func.id != 'range':
-                            ERR(node, "Currently only range-based loops are supported. range(start, end, step)")
+                        if vals.func.id != 'range' and vals.func.id != 'rrange':
+                            ERR(vals, "Currently only range-based loops are supported. range(start, end, step)")
                         limits = parse_for_range(vals)
-                        iters.append((target.id, limits[0], limits[1], limits[2]))
+                        iters.append((target.id, limits[0], limits[1], limits[2], False if vals.func.id == 'range' else True))
 
                 else:
                     ERR(node, "Expected tuple of same length in iter")
             else:
-                ERR(node, "Expected name or tuple")
+                ERR(node, "Expected same number of Name, Tuple associations")
 
             INDENT(indent)
             Translate.text('for(')
@@ -605,18 +665,18 @@ def PYSL_block(nodes : [ast.AST], indent : int):
 
             # Bounds
             for i in iters[:-1]:
-                op = '<' if i[3] > 0 else '>'
+                op = '<' if i[4] == False else '>'
                 Translate.text('{0} {1} {2}, '.format(i[0], op, i[2]))
             if iters:
-                op = '<' if iters[-1][3] > 0 else '>'
+                op = '<' if iters[-1][4] == False else '>'
                 Translate.text('{0} {1} {2};'.format(iters[-1][0], op, iters[-1][2]))
 
             # Increments
             for i in iters[:-1]:
-                op = '+' if i[3] > 0 else '-'
+                op = '+' if i[4] == False else '-'
                 Translate.text('{0} {1}= {2}, '.format(i[0], op, i[3]))
             if iters:
-                op = '+' if iters[-1][3] > 0 else '-'
+                op = '+' if iters[-1][4] == False else '-'
                 Translate.text('{0} {1}= {2})\n'.format(iters[-1][0], op, iters[-1][3]))
 
             INDENT(indent)
@@ -690,6 +750,7 @@ def PYSL_function_signature(func : ast.FunctionDef):
         if not isinstance(arg.annotation, ast.Name):
             ERR(arg, "Expected type for parameter: {0} of function: {1}".format(arg.arg, func.name))
         else:
+            print(arg.value)
             Translate.text('{0} {1}, '.format(arg.annotation.id, arg.arg))
 
     if func.args.args:

@@ -37,20 +37,24 @@ class Constant:
         self.array_size : int = None
         self.offset : int = None
 
-class ConstantBuffer:
+class Object:
     def __init__(self):
-        self.name : str = None
+        self.name = None
+
+class ConstantBuffer(Object):
+    def __init__(self):
+        Object.__init__(self)
         self.constants : [Constant] = None
         self.enforced_size : int = None
 
-class SamplerState:
+class SamplerState(Object):
     def __init__(self):
-        self.name : str = None
+        Object.__init__(self)
         self.attributes : [(str, str)] = []
 
-class Texture:
+class Texture(Object):
     def __init__(self):
-        self.name : str = None
+        Object.__init__(self)
         self.type : str = None
         self.attributes : [(str, str)] = []
 
@@ -167,8 +171,10 @@ class Keywords:
     SamplerStateConstructor = 'SamplerState'
     TextureConstructor = 'Texture'
 
+    ConstantBuffersKey = 'ConstantBuffers'
     SamplerStatesKey = 'SamplerStates'
     TexturesKey = 'Textures'
     VertexShaderKey = 'VertexShader'
     PixelShaderKey = 'PixelShader'
     NameKey = 'Name'
+    SizeKey = 'Size'
