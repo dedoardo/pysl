@@ -1,11 +1,13 @@
 import pysl
 import math
+import os
 
 _OUT = None
 
 def init(path : str) -> bool:
     try:
         global _OUT
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         _OUT = open(path, 'w')
     except IOError as e:
         print("Failed to open file: {0} with error: {1}".format(path, e))

@@ -4,6 +4,8 @@ import hlsl
 import pysl
 import json
 import copy
+import argparse
+import os
 
 # Helpers
 #-------------------------------------------------------------------------------
@@ -44,32 +46,42 @@ class Metadata:
     objects = { }
 
     @staticmethod
-    def init(metadata_path : str):
-        try:
-            Metadata._JSON = open(metadata_path + '.json', 'w')
-        except IOError as e:
-            print("Failed to open file: {0} with error: {1}".format(metadata_path + '.json', e))
-            return False
-        Metadata._ROOT = { }
-        Metadata._ROOT[pysl.Keywords.SamplerStatesKey] = []
-        Metadata._ROOT[pysl.Keywords.TexturesKey] = []
-        Metadata._ROOT[pysl.Keywords.ConstantBuffersKey] = []
-        Metadata._ROOT[pysl.Keywords.OptionsKey] = []
+    def init(metadata : str, cpp  : str):
+        if metadata:
+            os.makedirs(os.path.dirname(metadata), exist_ok=True)
+            try:
+                Metadata._JSON = open(metadata, 'w')
+            except IOError as e:
+                print("Failed to open file: {0} with error: {1}".format(metadata + '.json', e))
+                return False
+            Metadata._ROOT = { }
+            Metadata._ROOT[pysl.Keywords.SamplerStatesKey] = []
+            Metadata._ROOT[pysl.Keywords.TexturesKey] = []
+            Metadata._ROOT[pysl.Keywords.ConstantBuffersKey] = []
+            Metadata._ROOT[pysl.Keywords.OptionsKey] = []
 
-        Metadata._CPP = open(metadata_path + '.hpp', 'w')
-        Metadata._CPP.write('#pragma once\n')
-        Metadata._CPP.write('#pragma pack(push, 1)\n')
+        if cpp:
+            os.makedirs(os.path.dirname(cpp), exist_ok=True)
+            Metadata._CPP = open(cpp, 'w')
+            Metadata._CPP.write('#pragma once\n')
+            Metadata._CPP.write('#pragma pack(push, 1)\n')
 
         return True
 
     @staticmethod
     def finalize():
-        Metadata._JSON.write(json.dumps(Metadata._ROOT, indent = 4, separators=(',', ': ')))
-        Metadata._CPP.write('#pragma pack(pop)\n')
-        Metadata._CPP.close()
+        if Metadata._ROOT:
+            Metadata._JSON.write(json.dumps(Metadata._ROOT, indent = 4, separators=(',', ': ')))
+       
+        if Metadata._CPP:
+            Metadata._CPP.write('#pragma pack(pop)\n')
+            Metadata._CPP.close()
 
     @staticmethod
     def entry_point(stage : str, name : str):
+        if not Metadata._ROOT:
+            return
+
         if stage == pysl.Keywords.VertexShaderDecorator:
             if pysl.Keywords.VertexShaderKey in Metadata._ROOT:
                 ERR(None, "Trying to register multiple vertex shaders")
@@ -85,14 +97,18 @@ class Metadata:
 
     @staticmethod
     def constant_buffer_attrs(cbuffer : pysl.ConstantBuffer):
-        cb = { }
-        cb[pysl.Keywords.NameKey] = cbuffer.name
+        if Metadata._ROOT:
+            cb = { }
+            cb[pysl.Keywords.NameKey] = cbuffer.name
 
-        if cbuffer.enforced_size:
-            cb[pysl.Keywords.SizeKey] = cbuffer.enforced_size
+            if cbuffer.enforced_size:
+                cb[pysl.Keywords.SizeKey] = cbuffer.enforced_size
 
-        Metadata._ROOT[pysl.Keywords.ConstantBuffersKey].append(cb)
+            Metadata._ROOT[pysl.Keywords.ConstantBuffersKey].append(cb)
         Metadata.objects[cbuffer.name] = copy.deepcopy(cbuffer)
+
+        if not Metadata._CPP:
+            return
 
         Metadata._CPP.write('struct {0}\n{{\n'.format(cbuffer.name))
         cur_offset = 0
@@ -126,28 +142,33 @@ class Metadata:
        
     @staticmethod
     def sampler_state_attrs(sampler_state : pysl.SamplerState):
-        state = { }
-        state[pysl.Keywords.NameKey] = sampler_state.name
+        if Metadata._ROOT:
+            state = { }
+            state[pysl.Keywords.NameKey] = sampler_state.name
 
-        for key, val in sampler_state.attributes:
-            state[key] = val
+            for key, val in sampler_state.attributes:
+                state[key] = val
 
-        Metadata._ROOT[pysl.Keywords.SamplerStatesKey].append(state)
+            Metadata._ROOT[pysl.Keywords.SamplerStatesKey].append(state)
         Metadata.objects[sampler_state.name] = copy.deepcopy(sampler_state)
 
     @staticmethod
     def texture_attrs(texture : pysl.Texture):
-        t = { } 
-        t[pysl.Keywords.NameKey] = texture.name
+        if Metadata._ROOT:
+            t = { } 
+            t[pysl.Keywords.NameKey] = texture.name
 
-        for key, val in texture.attributes:
-            t[key] = val
+            for key, val in texture.attributes:
+                t[key] = val
 
-        Metadata._ROOT[pysl.Keywords.TexturesKey].append(t)
+            Metadata._ROOT[pysl.Keywords.TexturesKey].append(t)
         Metadata.objects[texture.name] = copy.deepcopy(texture)
 
     @staticmethod
     def options(options : [str]):
+        if not Metadata._ROOT:
+            return 
+
         Metadata._ROOT[pysl.Keywords.OptionsKey] += options
 
     @staticmethod
@@ -158,60 +179,77 @@ class Metadata:
             ERR(None, "Failed to find object: {0}. Are you sure you declared it?".format(name))
 
 class Translate:
+    _HLSL = False
+    _GLSL = False
+
     @staticmethod
     def init(hlsl_path : str, glsl_path : str):
-        return hlsl.init(hlsl_path)
+        if hlsl_path:
+            Translate._HLSL = hlsl.init(hlsl_path)
+            if not Translate._HLSL:
+                return False
+        return True
 
     @staticmethod
     def text(string : str):
-        hlsl.OUT(string)
+        if Translate._HLSL:
+            hlsl.OUT(string)
 
     @staticmethod
     def options(strings : [str]):
         Metadata.options(strings)
-        hlsl.options(strings)
+        if Translate._HLSL:
+            hlsl.options(strings)
 
     @staticmethod
     def stage_input(struct : pysl.StageInput):
-        hlsl.stage_input(struct)
+        if Translate._HLSL:
+            hlsl.stage_input(struct)
 
     @staticmethod
     def declaration(assignment : Assignment):
-        hlsl.declaration(assignment.type, assignment.name)
+        if Translate._HLSL:
+            hlsl.declaration(assignment.type, assignment.name)
 
     # Declaration
     @staticmethod
     def constant_buffer(cbuffer : pysl.ConstantBuffer):
         Metadata.constant_buffer_attrs(cbuffer)
-        hlsl.constant_buffer(cbuffer)
+        if Translate._HLSL:
+            hlsl.constant_buffer(cbuffer)
 
     # Declaration
     @staticmethod
     def sampler_state(sampler_state : pysl.SamplerState):
         Metadata.sampler_state_attrs(sampler_state)
-        hlsl.sampler_state(sampler_state)
+        if Translate._HLSL:
+            hlsl.sampler_state(sampler_state)
 
     # Declaration
     @staticmethod
     def texture(texture : pysl.Texture):
         Metadata.texture_attrs(texture)
-        hlsl.texture(texture)
+        if Translate._HLSL:
+            hlsl.texture(texture)
 
     @staticmethod
     def method_call(caller : str, name : str, args):
         obj : pysl.Object = Metadata.find(caller)
         if obj:
-            hlsl.method_call(obj, name, args)
+            if Translate._HLSL:
+                hlsl.method_call(obj, name, args)
         else:
             ERR(None, "Failed to translate {0}.{1} as the object type couldn't be deduced.".format(caller, name))
 
     @staticmethod
     def constructor(ctype : str, args):
-        hlsl.constructor(ctype, args)
+        if Translate._HLSL:
+            hlsl.constructor(ctype, args)
 
     @staticmethod
     def intrinsic(itype : str, args):
-        hlsl.intrinsic(itype, args)
+        if Translate._HLSL:
+            hlsl.intrinsic(itype, args)
 
 # AST Utilities
 #-------------------------------------------------------------------------------
@@ -890,15 +928,19 @@ if __name__ == '__main__':
         print("Please specify file to transpile")
         sys.exit()
 
-    out_path = 'out'
-    if (len(sys.argv) > 2):
-        out_path = sys.argv[2]
+    parser = argparse.ArgumentParser(description='PYthon Shading Language compiler')
+    parser.add_argument('output')
+    parser.add_argument('-ohlsl', type=str, action='store', default=None, help="ciao")
+    parser.add_argument('-oglsl', type=str, action='store', default=None)
+    parser.add_argument('-ojson', type=str, action='store', default=None)
+    parser.add_argument('-ohpp', type=str, action='store', default=None, help="moo")
+    args = parser.parse_args()
 
-    if not Translate.init(out_path + '.hlsl', out_path + '.glsl'):
+    if not Translate.init(args.ohlsl, args.oglsl):
         print('Failed to open destination HLSL/GLSL file, check permissions or paths')
         sys.exit()
 
-    if not Metadata.init(out_path):
+    if not Metadata.init(args.ojson, args.ohpp):
         print('Failed to open destination metadata file, check permissions or paths')
         sys.exit()
  
