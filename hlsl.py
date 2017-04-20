@@ -15,9 +15,6 @@ def init(path : str) -> bool:
 def OUT(string : str):
     _OUT.write(string)
 
-def text(string : str):
-    OUT(string)
-
 def TYPE(type : pysl.Type):
     return type.str
 
@@ -30,6 +27,15 @@ def OFFSET_TO_CONSTANT(offset : int):
     elif offset % 4 == 3:
         coff += '.w'
     return coff
+
+def text(string : str):
+    OUT(string)
+
+def options(options : [str]):
+    OUT('#if defined(__INTELLISENSE__)\n')
+    for opt in options:
+        OUT('#\tdefine {0}\n'.format(opt))
+    OUT('#endif\n\n')
 
 def stage_input(struct : pysl.StageInput):
     OUT('struct {0}\n{{\n'.format(struct.name))

@@ -10,11 +10,23 @@ class Scalar(Enum):
     FLOAT  = 3
     # DOUBLE = 4 Not supported yet, since i have yet to figure out a way to handle literals
 
+
+def scalar_to_cpp(scalar : Scalar) -> str:
+    if scalar == Scalar.BOOL:
+        return 'bool' 
+    elif scalar == Scalar.INT:
+        return 'int'
+    elif scalar == Scalar.UINT:
+        return 'unsigned int'
+    elif scalar == Scalar.FLOAT:
+        return 'float'
+    return 'ERROR'
+
 # Vector | Matrix
 class Type:
     def __init__(self):
         self.str : str = None
-        self.type : scalar = None
+        self.type : str = None
         self.dim0 : int = 1 # Vectors and matrix rows
         self.dim1 : int = 1 # Coloumns
 
@@ -171,6 +183,7 @@ class Keywords:
     SamplerStateConstructor = 'SamplerState'
     TextureConstructor = 'Texture'
 
+    OptionsKey = 'Options'
     ConstantBuffersKey = 'ConstantBuffers'
     SamplerStatesKey = 'SamplerStates'
     TexturesKey = 'Textures'

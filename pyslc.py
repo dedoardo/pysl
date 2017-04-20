@@ -39,6 +39,7 @@ class Assignment:
 class Metadata:
     _JSON = None
     _ROOT = None
+    _CPP  = None
     
     objects = { }
 
@@ -53,11 +54,19 @@ class Metadata:
         Metadata._ROOT[pysl.Keywords.SamplerStatesKey] = []
         Metadata._ROOT[pysl.Keywords.TexturesKey] = []
         Metadata._ROOT[pysl.Keywords.ConstantBuffersKey] = []
+        Metadata._ROOT[pysl.Keywords.OptionsKey] = []
+
+        Metadata._CPP = open(metadata_path + '.hpp', 'w')
+        Metadata._CPP.write('#pragma once\n')
+        Metadata._CPP.write('#pragma pack(push, 1)\n')
+
         return True
 
     @staticmethod
     def finalize():
         Metadata._JSON.write(json.dumps(Metadata._ROOT, indent = 4, separators=(',', ': ')))
+        Metadata._CPP.write('#pragma pack(pop)\n')
+        Metadata._CPP.close()
 
     @staticmethod
     def entry_point(stage : str, name : str):
@@ -85,6 +94,36 @@ class Metadata:
         Metadata._ROOT[pysl.Keywords.ConstantBuffersKey].append(cb)
         Metadata.objects[cbuffer.name] = copy.deepcopy(cbuffer)
 
+        Metadata._CPP.write('struct {0}\n{{\n'.format(cbuffer.name))
+        cur_offset = 0
+        paddings = 0
+        for constant in cbuffer.constants:
+            if constant.offset:
+                diff = constant.offset - cur_offset
+                if diff < 0: # Error in offset calculation
+                    ERR(None, "Invalid offset for constant: {0} in ConstantBuffer: {1}".format(constant.name, cbuffer.name))
+                elif diff > 0:
+                    Metadata._CPP.write('\tfloat __pysl_padding{0}[{1}];\n'.format(paddings, diff))
+                    paddings += 1
+
+            Metadata._CPP.write('\t{0} {1}'.format(pysl.scalar_to_cpp(constant.type.type), constant.name))
+            if constant.type.dim0 > 1:
+                Metadata._CPP.write('[{0}]'.format(constant.type.dim0))
+            if constant.type.dim1 > 1:
+                Metadata._CPP.write('[{0}]'.format(constant.type.dim1))
+            Metadata._CPP.write(';\n')
+            cur_offset += constant.type.dim0 * constant.type.dim1
+
+        if cbuffer.enforced_size:
+            diff = cbuffer.enforced_size - cur_offset
+            if diff < 0:
+                ERR(None, "Invalid enforced size in ConstantBuffer: {0}".format(cbuffer.name))
+            elif diff > 0:
+                Metadata._CPP.write('\tfloat __pysl_padding{0}[{1}];\n'.format(paddings, diff))
+
+        Metadata._CPP.write('};\n')
+        Metadata._CPP.write('static_assert(sizeof({0}) == {1}, "Invalid size");\n\n'.format(cbuffer.name, cbuffer.enforced_size * 4))
+       
     @staticmethod
     def sampler_state_attrs(sampler_state : pysl.SamplerState):
         state = { }
@@ -108,6 +147,10 @@ class Metadata:
         Metadata.objects[texture.name] = copy.deepcopy(texture)
 
     @staticmethod
+    def options(options : [str]):
+        Metadata._ROOT[pysl.Keywords.OptionsKey] += options
+
+    @staticmethod
     def find(name : str) -> pysl.Object:
         try:
             return Metadata.objects[name]
@@ -124,6 +167,11 @@ class Translate:
         hlsl.OUT(string)
 
     @staticmethod
+    def options(strings : [str]):
+        Metadata.options(strings)
+        hlsl.options(strings)
+
+    @staticmethod
     def stage_input(struct : pysl.StageInput):
         hlsl.stage_input(struct)
 
@@ -134,6 +182,7 @@ class Translate:
     # Declaration
     @staticmethod
     def constant_buffer(cbuffer : pysl.ConstantBuffer):
+        Metadata.constant_buffer_attrs(cbuffer)
         hlsl.constant_buffer(cbuffer)
 
     # Declaration
@@ -170,16 +219,25 @@ def str_to_pysl_type(string : str) -> pysl.Type:
     ret = pysl.Type()
     ret.str = string 
 
+    dims = ''
     if string[:4] == 'bool':
         ret.type = pysl.Scalar.BOOL
+        dims = string[4:]
     elif string[:3] == 'int':
         ret.type = pysl.Scalar.INT
+        dims = string[3:]
     elif string[:4] == 'uint':
         ret.type = pysl.Scalar.UINT 
+        dims = string[4:]
     elif string[:5] == 'float':
         ret.type = pysl.Scalar.FLOAT
+        dims = string[5:]
     else:
         ERR(None, "Invalid type: {0}".format(string))
+    if dims:
+        ret.dim0 = int(dims[0:1])
+    if dims[1:2] == 'x':
+        ret.dim1 = int(dims[2:3])
     return ret
 
 class Decorator:
@@ -242,6 +300,19 @@ def parse_preprocessor(call : ast.Call) -> str:
     if not isinstance(call.args[0], ast.Str):
         ERR(call, "Preprocessor requires arguments to be strings in the form of _('directive')")
     return call.args[0].s
+
+def parse_options(call : ast.Call) -> [str]:
+    if not isinstance(call, ast.Call):
+        ERR(call, "Option takes the form of option('option')")
+        return ''
+
+    ret = []
+    for arg in call.args:
+        if not isinstance(arg, ast.Str):
+            ERR(arg, "Expected string literal")
+            continue
+        ret.append(arg.s)
+    return ret
 
 def parse_attribute_no_eval(node : ast.Attribute) -> str:
     if isinstance(node.value, ast.Name):
@@ -776,13 +847,7 @@ def PYSL(path : str):
         return
 
     for node in ast.iter_child_nodes(root):
-        if isinstance(node, ast.Call):
-            if node.func.id is '_':
-                Translate.text(parse_preprocessor(node) + '\n')
-            else:
-                ERR(node, "Unsupported top-level function call")
-
-        elif isinstance(node, ast.ClassDef):
+        if isinstance(node, ast.ClassDef):
             # Stage input
             if not node.decorator_list:
                 Translate.stage_input(parse_stage_input(node))
@@ -807,8 +872,10 @@ def PYSL(path : str):
         
         elif isinstance(node, ast.Expr):
             if isinstance(node.value, ast.Call):
-                if node.value.func.id is '_':
+                if node.value.func.id == '_':
                     Translate.text(parse_preprocessor(node.value) + '\n\n')
+                if node.value.func.id == 'options':
+                    Translate.options(parse_options(node.value))
                 else:
                     ERR(node, "Unsupported top-level function call")
             else:
