@@ -452,6 +452,8 @@ def binop_str(op : ast.AST) -> str:
         return '^'
     if isinstance(op, ast.BitAnd):
         return '&'
+    if isinstance(op, ast.MatMult):
+        return '@'
     ERR(op, "Invalid binary operator encountered: {0}:{1}. Check supported intrinsics.".format(op.lineno, op.col_offset))
     return 'INVALID_BINOP'
 
@@ -614,9 +616,17 @@ def PYSL_eval(node : ast.AST):
         Translate.text(')')
 
     elif isinstance(node, ast.BinOp):
-        PYSL_eval(node.left)
-        Translate.text(' {0} '.format(binop_str(node.op)))
-        PYSL_eval(node.right)
+        # Checking if it's a cast operation
+        op_str = binop_str(node.op)
+        if op_str == '@':
+            Translate.text('(')
+            PYSL_eval(node.left)
+            Translate.text(')')
+            PYSL_eval(node.right)
+        else:
+            PYSL_eval(node.left)
+            Translate.text(' {0} '.format(op_str))
+            PYSL_eval(node.right)
 
     elif isinstance(node, ast.BoolOp):
         if len(node.values) > 2:
@@ -930,10 +940,10 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='PYthon Shading Language compiler')
     parser.add_argument('output')
-    parser.add_argument('-ohlsl', type=str, action='store', default=None, help="ciao")
-    parser.add_argument('-oglsl', type=str, action='store', default=None)
-    parser.add_argument('-ojson', type=str, action='store', default=None)
-    parser.add_argument('-ohpp', type=str, action='store', default=None, help="moo")
+    parser.add_argument('-ohlsl', type=str, action='store', default=None, help="HLSL destination path")
+    parser.add_argument('-oglsl', type=str, action='store', default=None, help="GLSL destination path")
+    parser.add_argument('-ojson', type=str, action='store', default=None, help="JSON metadata destination path")
+    parser.add_argument('-ohpp', type=str, action='store', default=None, help="C++ header destination path")
     args = parser.parse_args()
 
     if not Translate.init(args.ohlsl, args.oglsl):
