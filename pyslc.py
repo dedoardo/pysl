@@ -1,6 +1,7 @@
 import ast
 import sys
-import hlsl
+import hlsl5
+import glsl45
 import pysl
 import json
 import copy
@@ -25,11 +26,9 @@ def ERR(node : ast.AST, msg : str = ''):
     else:
         print('ERR[{0}::{1}:{2}] {3}'.format(pretty_node(node), node.lineno, node.col_offset, msg))
 
-class Assignment:
+class Assignment(pysl.Declaration):
     def __init__(self):
-        self.name : str = None
-        self.type : str = None
-        self.is_const : bool = None
+        pysl.Declaration.__init__(self)
         self.value : str = None
 
 # Translation routines
@@ -139,22 +138,13 @@ class Metadata:
         Metadata._CPP.write('static_assert(sizeof({0}) == {1}, "Invalid size");\n\n'.format(cbuffer.name, cbuffer.enforced_size * 4))
        
     @staticmethod
-    def sampler_state_attrs(sampler_state : pysl.SamplerState):
+    def sampler_attrs(sampler : pysl.Sampler):
         if Metadata._ROOT:
             state = { }
-            state[pysl.Keywords.NameKey] = sampler_state.name
-            for key, val in sampler_state.attributes:
+            state[pysl.Keywords.NameKey] = sampler.name
+            for key, val in sampler.attributes:
                 state[key] = val
             Metadata._ROOT[pysl.Keywords.SamplerStatesKey].append(state)
-
-    @staticmethod
-    def texture_attrs(texture : pysl.Texture):
-        if Metadata._ROOT:
-            t = { } 
-            t[pysl.Keywords.NameKey] = texture.name
-            for key, val in texture.attributes:
-                t[key] = val
-            Metadata._ROOT[pysl.Keywords.TexturesKey].append(t)
 
     @staticmethod
     def options(options : [str]):
@@ -170,7 +160,7 @@ class Translate:
     def init(hlsl_path : str, glsl_path : str) -> bool:
         """Initializes the backends and the symbol table -> bool"""
         if hlsl_path:
-            Translate._HLSL = hlsl.init(hlsl_path)
+            Translate._HLSL = hlsl5.init(hlsl_path)
             if not Translate._HLSL:
                 return False
         Translate._SYMBOLS = { } 
@@ -180,7 +170,7 @@ class Translate:
     def text(string : str):
         """Writes text directly to the output such as preprocessor strings"""
         if Translate._HLSL:
-            hlsl.OUT(string)
+            hlsl5.OUT(string)
 
     # TOP-LEVEL
     #---------------------------------------------------------------------------
@@ -191,7 +181,7 @@ class Translate:
 
         # HlslTools helper: https://github.com/tgjones/HlslTools
         if Translate._HLSL:
-            hlsl.options(strings)
+            hlsl5.options(strings)
 
     @staticmethod
     def decl_struct(struct : pysl.Struct):
@@ -200,7 +190,7 @@ class Translate:
             return
 
         if Translate._HLSL:
-            hlsl.struct(struct)
+            hlsl5.struct(struct)
 
         Translate._SYMBOLS[struct.name] = struct
 
@@ -212,7 +202,7 @@ class Translate:
             return
 
         if Translate._HLSL:
-            hlsl.stage_input(struct)
+            hlsl5.stage_input(struct)
 
         Translate._SYMBOLS[struct.name] = struct
 
@@ -225,38 +215,25 @@ class Translate:
 
         Metadata.constant_buffer_attrs(cbuffer)
         if Translate._HLSL:
-            hlsl.constant_buffer(cbuffer)
+            hlsl5.constant_buffer(cbuffer)
 
         Translate._SYMBOLS[cbuffer.name] = cbuffer
 
     @staticmethod
-    def sampler_state(sampler_state : pysl.SamplerState):
+    def sampler(sampler : pysl.Sampler):
         """Sampler state declaration"""
-        if sampler_state.name in Translate._SYMBOLS:
-            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[sampler_state.name]))
+        if sampler.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[sampler.name]))
             return
 
-        Metadata.sampler_state_attrs(sampler_state)
+        Metadata.sampler_attrs(sampler)
         if Translate._HLSL:
-            hlsl.sampler_state(sampler_state)
+            hlsl5.sampler(sampler)
 
-        Translate._SYMBOLS[sampler_state.name] = sampler_state
+        Translate._SYMBOLS[sampler.name] = sampler
 
     @staticmethod
-    def texture(texture : pysl.Texture):
-        """Texture declaration"""
-        if texture.name in Translate._SYMBOLS:
-            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[texture.name]))
-            return
-
-        Metadata.texture_attrs(texture)
-        if Translate._HLSL:
-            hlsl.texture(texture)
-
-        Translate._SYMBOLS[texture.name] = texture
-
-    @staticmethod
-    def _parameter(arg : pysl.FunctionArg):
+    def _parameter(arg : pysl.Declaration):
         """Writes a function parameter """
         if (arg.type not in pysl.TYPES and(
             arg.type not in Translate._SYMBOLS or(
@@ -267,9 +244,7 @@ class Translate:
             return
 
         if Translate._HLSL:
-            if arg.out:
-                hlsl.text('out ')
-            hlsl.declaration(arg.type, arg.name)
+            hlsl5.declaration(arg)
 
     @staticmethod
     def function_beg(func : pysl.Function):
@@ -293,7 +268,7 @@ class Translate:
                 ERR(None, "Undeclared input or output for function stage: {0}:{1}".format(func.name, func.stage))
                 return
             if Translate._HLSL:
-                hlsl.entry_point_beg(func, func_in, func_out)
+                hlsl5.entry_point_beg(func, func_in, func_out)
         else:
             # Standard C-like function declaration
             Translate.text('{0} {1}('.format(func.return_value, func.name))
@@ -305,7 +280,7 @@ class Translate:
     @staticmethod
     def function_end(func : pysl.Function):
         if func.stage:
-            hlsl.entry_point_end(func)
+            hlsl5.entry_point_end(func)
         else:
             Translate.text('};\n\n')
 
@@ -326,34 +301,35 @@ class Translate:
             return
 
         if Translate._HLSL:
-            if assignment.is_const:
-                hlsl.text('const ')
-            hlsl.declaration(assignment.type, assignment.name)
+            hlsl5.declaration(assignment)
 
     @staticmethod
     def method_call(caller : str, name : str, args):
         """Method calls are used simply as a stylistic way to expose intrinsics""" 
+
+        obj = None
         
         # Right now method calls are supported exclusively by textures, thus
         # the caller has to be registered in the symbol table
-        if caller not in Translate._SYMBOLS or not isinstance(Translate._SYMBOLS[caller], pysl.Texture):
-            ERR(None, "Expected texture object in method call: {0}".format(caller))
+        if caller not in Translate._SYMBOLS or not isinstance(Translate._SYMBOLS[caller], pysl.Sampler):
+            ERR(None, "Expected sampler object in method call: {0}".format(caller))
             return
+        obj = Translate._SYMBOLS[caller]
 
         if Translate._HLSL:
-            hlsl.method_call(obj, name, args)
+            hlsl5.method_call(obj, name, args)
 
     @staticmethod
     def constructor(typename : str, args):
         """Type constructor, assuming that typename is in pysl.TYPES""" 
         if Translate._HLSL:
-            hlsl.constructor(typename, args)
+            hlsl5.constructor(typename, args)
 
     @staticmethod
     def intrinsic(itype : str, args):
         """Intrinsic function, assuming that itype is in pysl.INTRINSICS"""
         if Translate._HLSL:
-            hlsl.intrinsic(itype, args)
+            hlsl5.intrinsic(itype, args)
 
     @staticmethod
     def function_call(function : str, args):
@@ -373,7 +349,7 @@ class Translate:
     @staticmethod
     def special_attribute(attribute : str):
         if Translate._HLSL:
-            hlsl.special_attribute(attribute)
+            hlsl5.special_attribute(attribute)
 
 # AST Utilities
 #-------------------------------------------------------------------------------
@@ -490,15 +466,15 @@ def parse_assignment(node : ast.AST) -> Assignment:
         return
 
     ret = Assignment()
+    ret.qualifiers = []
     if isinstance(node, ast.AnnAssign):
         # Declaration
         ret.name = node.target.id
         if isinstance(node.annotation, ast.Name):
             ret.type = node.annotation.id
-            ret.is_const = False
         elif isinstance(node.annotation, ast.Attribute) and isinstance(node.annotation.value, ast.Name):
-            if node.annotation.value.id == 'const':
-                ret.is_const = True
+            if node.annotation.value.id == pysl.Keywords.ConstQualifier:
+                ret.qualifiers.append(pysl.Keywords.ConstQualifier)
             else:
                 ERR(node.annotation, "Unsupported qualifier, only const is supported in a block assignment/declaration")
             ret.type = node.annotation.attr
@@ -688,38 +664,30 @@ def parse_constant_buffer(node : ast.ClassDef) -> pysl.ConstantBuffer:
                 ERR(d, "Expected integer argument to constructor indicating enforced size(in constants), but evaluated: {0}".format(decorator.args[0]))
     return cbuffer
 
-def parse_sampler_state(name : str, slot : int, value : ast.AST) -> pysl.SamplerState:
-    state = pysl.SamplerState()
-    state.name = name
+def parse_sampler(name : str, type : str, slot : int, value : ast.AST) -> pysl.Sampler:
+    sampler = pysl.Sampler()
+    sampler.name = name
+    sampler.type = type
+    sampler.slot = slot
 
     if value:
-        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name) or not value.func.id == pysl.Keywords.SamplerStateConstructor:
-            ERR(value, "Expected SamplerState constructor")
+        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name) or not value.func.id == pysl.Keywords.Export:
+            ERR(value, "Expected export() expression")
         else:
             for kw in value.keywords:
-                if not isinstance(kw.value, ast.Name):
-                    ERR(kw, "Expected name as value")
+                val = None
+                if isinstance(kw.value, ast.Name):
+                    val = kw.value.id
+                elif isinstance(kw.value, ast.Num):
+                    val = kw.value.n
+                elif isinstance(kw.value, ast.Str):
+                    val = kw.value.s
+                else:
+                    ERR(kw, "Unsupported export value, only literals or names are currently supported")
                     continue
-                state.attributes.append((kw.arg, kw.value.id))
+                sampler.attributes.append((kw.arg, val))
 
-    return state
-
-def parse_texture(name : str, ttype : str, slot : int, value : ast.AST) -> pysl.Texture:
-    texture = pysl.Texture()
-    texture.name = name
-    texture.type = ttype[7:]
-
-    if value:
-        if not isinstance(value, ast.Call) or not isinstance(value.func, ast.Name) or not value.func.id[:7] == pysl.Keywords.TextureConstructor:
-            ERR(value, "Expected Texture constructor")
-        else:
-            for kw in value.keywords:
-                if not isinstance(kw.value, ast.Name):
-                    ERR(kw, "Expected name as value")
-                    continue
-                texture.attributes.append((kw.arg, kw.value.id))
-
-    return texture;
+    return sampler
 
 # Evalution code
 #-------------------------------------------------------------------------------
@@ -992,15 +960,15 @@ def PYSL_block(nodes : [ast.AST], indent : int):
         else:
             ERR(node, "Unsupported block expression")
 
-def PYSL_arg(func : ast.FunctionDef, arg : ast.arg) -> pysl.FunctionArg:
+def PYSL_arg(func : ast.FunctionDef, arg : ast.arg) -> pysl.Declaration:
     if isinstance(arg.annotation, ast.Name):
-        return pysl.FunctionArg(arg.annotation.id, arg.arg, False)
+        return pysl.Declaration(arg.annotation.id, arg.arg, [])
     elif isinstance(arg.annotation, ast.Attribute) and isinstance(arg.annotation.value, ast.Name):
-        if arg.annotation.value.id == 'out':
-            return pysl.FunctionArg(arg.annotation.attr, arg.arg, True)
+        if arg.annotation.value.id == pysl.Keywords.OutQualifier:
+            return pysl.Declaration(arg.annotation.attr, arg.arg, [pysl.Keywords.OutQualifier])
     else:
         ERR(arg, "Expected type for parameter: {0} of function: {1}".format(arg.arg, func.name))
-        return pysl.FunctionArg(None, None, None)
+        return pysl.Declaration(None, None, None)
 
 def PYSL_function_signature(func : ast.FunctionDef):
     ret = pysl.Function()
@@ -1038,27 +1006,21 @@ def PYSL_function_signature(func : ast.FunctionDef):
 
 def PYSL_tl_decl(node : ast.AnnAssign):
     """Parses a specific top-level declaration"""
-    res_name = node.target.id
-    res_type = None
-    res_slot = None
+    if not isinstance(node.annotation, ast.Call) or (
+        node.annotation.func.id != 'register' or 
+        len(node.annotation.args) != 2 or
+        not isinstance(node.annotation.args[0], ast.Name) or
+        not isinstance(node.annotation.args[1], ast.Num)):
+        ERR(node, "Invalid top level resource declaration, see docs. <name> : register(<type>, <slot>) = (...)")
 
-    if isinstance(node.annotation, ast.Call) and node.annotation.func.id == 'register' and len(node.annotation.args) == 2:
-        if isinstance(node.annotation.args[0], ast.Name) and isinstance(node.annotation.args[1], ast.Num):
-            res_type = node.annotation.args[0].id
-            res_slot = node.annotation.args[1].n
-        else:
-            ERR(node, "Invalid register call, it should be register(Name, Num)") 
-    elif isinstance(node.annotation, ast.Name):
-        res_type = node.annotation.id
+    res_name = node.target.id
+    res_type = node.annotation.args[0].id
+    res_slot = node.annotation.args[1].n
+
+    if res_type in pysl.Keywords.SamplerTypes:
+        Translate.sampler(parse_sampler(res_name, res_type, res_slot, node.value))
     else:
-        ERR(node, "Unrecognized top-level declaration: {0}".format(res_name))
-    
-    if res_type == pysl.Keywords.SamplerStateConstructor:
-        Translate.sampler_state(parse_sampler_state(res_name, res_slot, node.value))
-    elif res_type[:7] == pysl.Keywords.TextureConstructor:
-        Translate.texture(parse_texture(res_name, res_type, res_slot, node.value))
-    else:
-        ERR(node, "Unrecognized type: {0} for top-level declaration: {1}".format(res_type, res_name))       
+        ERR(node, "Unrecognized top-level resource declaration {0} : {1}".format(res_name, res_type))    
 
 def PYSL(path : str):
     """Finds all the top-level nodes"""
@@ -1124,13 +1086,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='PYthon Shading Language compiler')
     parser.add_argument('output')
-    parser.add_argument('-ohlsl', type=str, action='store', default=None, help="HLSL destination path")
-    parser.add_argument('-oglsl', type=str, action='store', default=None, help="GLSL destination path")
+    parser.add_argument('-ohlsl5', type=str, action='store', default=None, help="HLSL destination path")
+    parser.add_argument('-oglsl45', type=str, action='store', default=None, help="GLSL destination path")
     parser.add_argument('-ojson', type=str, action='store', default=None, help="JSON metadata destination path")
     parser.add_argument('-ohpp', type=str, action='store', default=None, help="C++ header destination path")
     args = parser.parse_args()
 
-    if not Translate.init(args.ohlsl, args.oglsl):
+    if not Translate.init(args.ohlsl5, args.oglsl45):
         print('Failed to open destination HLSL/GLSL file, check permissions or paths')
         sys.exit()
 

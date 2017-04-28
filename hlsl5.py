@@ -4,6 +4,8 @@ import os
 
 _OUT = None
 
+# Core
+#-------------------------------------------------------------------------------
 def init(path : str) -> bool:
     try:
         global _OUT
@@ -33,6 +35,13 @@ def OFFSET_TO_CONSTANT(offset : int):
 def text(string : str):
     OUT(string)
 
+def declaration(declaration : pysl.Declaration):
+    for qualifier in declaration.qualifiers:
+        OUT('{0} '.format(qualifier))
+    OUT('{0} {1}'.format(declaration.type, declaration.name))
+
+# Top-level
+#-------------------------------------------------------------------------------
 def options(options : [str]):
     OUT('#if defined(__INTELLISENSE__)\n')
     for opt in options:
@@ -45,18 +54,15 @@ def struct(struct : pysl.Struct):
         OUT('\t{0} {1};\n'.format(TYPE(element[0]), element[1]))
     OUT('};\n\n')
 
-def stage_input(struct : pysl.StageInput):
-    OUT('struct {0}\n{{\n'.format(struct.name))
-    for element in struct.elements:
+def stage_input(si : pysl.StageInput):
+    OUT('struct {0}\n{{\n'.format(si.name))
+    for element in si.elements:
         for cond in element.conditions:
             OUT('{0}\n'.format(cond))
         OUT('\t{0} {1} : {2};\n'.format(TYPE(element.type), element.name, element.semantic))
-    for cond in struct.post_conditions:
+    for cond in si.post_conditions:
         OUT('{0}\n'.format(cond))
     OUT('};\n\n')
-
-def declaration(type : str, name : str):
-    OUT('{0} {1}'.format(type, name))
 
 def entry_point_beg(func : pysl.Function, sin : pysl.StageInput, sout : pysl.StageInput):
     OUT('{0} {1}('.format(sout.name, func.name))
@@ -81,12 +87,16 @@ def constant_buffer(cbuffer : pysl.ConstantBuffer):
 
     OUT('};\n\n')
 
-def sampler_state(sampler_state : pysl.SamplerState):
-    OUT('SamplerState {0};\n'.format(sampler_state.name))
+def TEXTURE_NAME_FROM_SAMPLER(sampler_name : str) -> str:
+    return sampler_name + '__tex'
 
-def texture(texture : pysl.Texture):
-    OUT('Texture{0} {1};\n'.format(texture.type, texture.name))
+def sampler(sampler : pysl.Sampler):
+    texture_type = sampler.type
+    OUT('Texture{0} {1} : register(t{2});\n'.format(texture_type, TEXTURE_NAME_FROM_SAMPLER(sampler.name), sampler.slot))
+    OUT('SamplerState {0} : register(s{1});\n\n'.format(sampler.name, sampler.slot))
 
+# Block-level
+#-------------------------------------------------------------------------------
 def _args(args):
     for i in range(len(args) - 1):
         args[i]()
@@ -96,17 +106,18 @@ def _args(args):
 
 def method_call(caller : pysl.Object, method : str, args):
     if caller:
-        OUT('{0}.{1}('.format(caller.name, method))
-        _args(args)
-        OUT(')')
+        if isinstance(caller, pysl.Sampler):
+            OUT('{0}.{1}({2}, '.format(TEXTURE_NAME_FROM_SAMPLER(caller.name), method, caller.name))
+            _args(args)
+            OUT(')')
 
-def constructor(ctype : str, args):
-    OUT('{0}('.format(ctype))
+def constructor(type : str, args):
+    OUT('{0}('.format(type))
     _args(args)
     OUT(')')
 
-def intrinsic(itype : str, args):
-    OUT('{0}('.format(itype))
+def intrinsic(type : str, args):
+    OUT('{0}('.format(type))
     _args(args)
     OUT(')')
 

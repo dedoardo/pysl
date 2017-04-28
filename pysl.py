@@ -35,34 +35,41 @@ class Type:
         self.dim0 : int = 1 
         self.dim1 : int = 1
 
-class Struct:
-    def __init__(self):
+class Declaration:
+    def __init__(self, type : str = None, name : str = None, qualifiers : [str] = None):
         self.name : str = None
-        self.elements : [(Type, str)] = None
-
-class InputElement:
-    def __init__(self):
-        self.name : str = None
-        self.type : Type = None
-        self.semantic : str = None
-        self.conditions : [str] = None
-
-class StageInput:
-    def __init__(self):
-        self.stages : [str] = None
-        self.elements : [InputElement] = None
-        self.post_conditions : [str] = None
-
-class Constant:
-    def __init__(self):
-        self.name : str = None
-        self.type : Type = None
-        self.array_size : int = None
-        self.offset : int = None
+        self.type : str = None
+        self.qualifiers : [str] = None
 
 class Object:
     def __init__(self, name = None):
         self.name = name
+
+class Struct(Object):
+    def __init__(self):
+        Object.__init__(self)
+        self.elements : [(Type, str)] = None
+
+class InputElement(Object):
+    def __init__(self):
+        Object.__init__(self)    
+        self.type : Type = None
+        self.semantic : str = None
+        self.conditions : [str] = None
+
+class StageInput(Object):
+    def __init__(self):
+        Object.__init__(self)
+        self.stages : [str] = None
+        self.elements : [InputElement] = None
+        self.post_conditions : [str] = None
+
+class Constant(Object):
+    def __init__(self):
+        Object.__init__(self)
+        self.type : Type = None
+        self.array_size : int = None
+        self.offset : int = None
 
 class ConstantBuffer(Object):
     def __init__(self):
@@ -70,31 +77,22 @@ class ConstantBuffer(Object):
         self.constants : [Constant] = None
         self.enforced_size : int = None
 
-class SamplerState(Object):
-    def __init__(self):
-        Object.__init__(self)
-        self.attributes : [(str, str)] = []
-
-class Texture(Object):
+class Sampler(Object):
     def __init__(self):
         Object.__init__(self)
         self.type : str = None
+        self.texture_name : str = None
+        self.slot : int = None
         self.attributes : [(str, str)] = []
-
-class FunctionArg(Object):
-    def __init__(self, type = None, name = None, out = None):
-        Object.__init__(self, name)
-        self.type : Type = type
-        self.out : bool = out
 
 class Function(Object):
     def __init__(self):
         Object.__init__(self)
         self.return_value : Type = None
-        self.args : [FunctionArg] = None
+        self.args : [pysl.Declaration] = None
         self.stage : str = None # if entry point
 
-# HLSL convention, if the GLSL version differs it's reported on the side
+# HLSL convention
 INTRINSICS = [
     'abs', 
     'acos',
@@ -203,6 +201,11 @@ TYPES = [
 ]
 
 class Keywords:
+    # Qualifiers
+    OutQualifier = 'out'
+    ConstQualifier = 'const'
+
+    # Class decorators
     VertexShaderDecorator = 'VS'
     PixelShaderDecorator = 'PS'
     FunctionDecorators = [VertexShaderDecorator, PixelShaderDecorator]
@@ -216,12 +219,16 @@ class Keywords:
     StageInputDecorator = 'StageInput'
     ConstantBufferDecorator = 'ConstantBuffer'
 
-    SamplerStateConstructor = 'SamplerState'
-    TextureConstructor = 'Texture'
-
+    # Opaque types
+    SamplerTypes = ['Sampler1D', 'Sampler2D', 'Sampler3D', 'SamplerCube', 'Sampler1DArray', 'Sampler2DArray', 'Sampler2DMS', 'Sampler2DMSArray', 'SamplerCubeArray', 'Sampler1DShadow', 'Sampler2DShadow', 'Sampler1DArrayShadow', 'Sampler2DArrayShadow', 'SamplerCubeShadow', 'SamplerCubeArrayShadow']
+    SamplerTypeExts = [t[7:] for t in SamplerTypes]
+    Export = 'export'
+    
+    # Special values
     InputValue = 'input'
     OutputValue = 'output'
 
+    # Metadata keys
     OptionsKey = 'Options'
     ConstantBuffersKey = 'ConstantBuffers'
     SamplerStatesKey = 'SamplerStates'

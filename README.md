@@ -80,9 +80,14 @@ def ps_ep():
 ```
 **Every entry point has a local variable named `input` and one `output` that refer to that stage's in and out attributes**
 While in HLSL you would create a struct on the stack and return it, in GLSL entry points are void and variables are set globally (they have `out` qualifiers). The approach chosen in PYSL is to declare what data you are going to return and what not and automatically to the job for you. Rewriting the parameters as input to the entry points would be error-prone(more checking to be done) and fundamentally redundant.
+**Do not write entrypoints the HLSL way**, it will result in duplicate code
 
 ### Constant Buffers
 
 
 ### Opaque types (Sampler, Texture)
 
+
+
+TODO:
+Specify types in documentation
