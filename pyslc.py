@@ -29,6 +29,7 @@ class Assignment:
     def __init__(self):
         self.name : str = None
         self.type : str = None
+        self.is_const : bool = None
         self.value : str = None
 
 # Translation routines
@@ -42,8 +43,6 @@ class Metadata:
     _JSON = None
     _ROOT = None
     _CPP  = None
-    
-    objects = { }
 
     @staticmethod
     def init(metadata : str, cpp  : str):
@@ -105,7 +104,6 @@ class Metadata:
                 cb[pysl.Keywords.SizeKey] = cbuffer.enforced_size
 
             Metadata._ROOT[pysl.Keywords.ConstantBuffersKey].append(cb)
-        Metadata.objects[cbuffer.name] = copy.deepcopy(cbuffer)
 
         if not Metadata._CPP:
             return
@@ -145,111 +143,237 @@ class Metadata:
         if Metadata._ROOT:
             state = { }
             state[pysl.Keywords.NameKey] = sampler_state.name
-
             for key, val in sampler_state.attributes:
                 state[key] = val
-
             Metadata._ROOT[pysl.Keywords.SamplerStatesKey].append(state)
-        Metadata.objects[sampler_state.name] = copy.deepcopy(sampler_state)
 
     @staticmethod
     def texture_attrs(texture : pysl.Texture):
         if Metadata._ROOT:
             t = { } 
             t[pysl.Keywords.NameKey] = texture.name
-
             for key, val in texture.attributes:
                 t[key] = val
-
             Metadata._ROOT[pysl.Keywords.TexturesKey].append(t)
-        Metadata.objects[texture.name] = copy.deepcopy(texture)
 
     @staticmethod
     def options(options : [str]):
-        if not Metadata._ROOT:
-            return 
-
-        Metadata._ROOT[pysl.Keywords.OptionsKey] += options
-
-    @staticmethod
-    def find(name : str) -> pysl.Object:
-        try:
-            return Metadata.objects[name]
-        except KeyError:
-            ERR(None, "Failed to find object: {0}. Are you sure you declared it?".format(name))
+        if Metadata._ROOT:
+            Metadata._ROOT[pysl.Keywords.OptionsKey] += options
 
 class Translate:
     _HLSL = False
     _GLSL = False
+    _SYMBOLS = None
 
     @staticmethod
-    def init(hlsl_path : str, glsl_path : str):
+    def init(hlsl_path : str, glsl_path : str) -> bool:
+        """Initializes the backends and the symbol table -> bool"""
         if hlsl_path:
             Translate._HLSL = hlsl.init(hlsl_path)
             if not Translate._HLSL:
                 return False
+        Translate._SYMBOLS = { } 
         return True
 
     @staticmethod
     def text(string : str):
+        """Writes text directly to the output such as preprocessor strings"""
         if Translate._HLSL:
             hlsl.OUT(string)
 
+    # TOP-LEVEL
+    #---------------------------------------------------------------------------
     @staticmethod
     def options(strings : [str]):
+        """Adds a bunch of compilation options"""
         Metadata.options(strings)
+
+        # HlslTools helper: https://github.com/tgjones/HlslTools
         if Translate._HLSL:
             hlsl.options(strings)
 
     @staticmethod
-    def stage_input(struct : pysl.StageInput):
+    def decl_struct(struct : pysl.Struct):
+        if struct.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[struct.name]))
+            return
+
+        if Translate._HLSL:
+            hlsl.struct(struct)
+
+        Translate._SYMBOLS[struct.name] = struct
+
+    @staticmethod
+    def decl_stage_input(struct : pysl.StageInput):
+        """Stage input declaration"""
+        if struct.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[struct.name]))
+            return
+
         if Translate._HLSL:
             hlsl.stage_input(struct)
 
-    @staticmethod
-    def declaration(assignment : Assignment):
-        if Translate._HLSL:
-            hlsl.declaration(assignment.type, assignment.name)
+        Translate._SYMBOLS[struct.name] = struct
 
-    # Declaration
     @staticmethod
     def constant_buffer(cbuffer : pysl.ConstantBuffer):
+        """Constant buffer declaration"""
+        if cbuffer.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[cbuffer.name]))
+            return
+
         Metadata.constant_buffer_attrs(cbuffer)
         if Translate._HLSL:
             hlsl.constant_buffer(cbuffer)
 
-    # Declaration
+        Translate._SYMBOLS[cbuffer.name] = cbuffer
+
     @staticmethod
     def sampler_state(sampler_state : pysl.SamplerState):
+        """Sampler state declaration"""
+        if sampler_state.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[sampler_state.name]))
+            return
+
         Metadata.sampler_state_attrs(sampler_state)
         if Translate._HLSL:
             hlsl.sampler_state(sampler_state)
 
-    # Declaration
+        Translate._SYMBOLS[sampler_state.name] = sampler_state
+
     @staticmethod
     def texture(texture : pysl.Texture):
+        """Texture declaration"""
+        if texture.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[texture.name]))
+            return
+
         Metadata.texture_attrs(texture)
         if Translate._HLSL:
             hlsl.texture(texture)
 
-    @staticmethod
-    def method_call(caller : str, name : str, args):
-        obj : pysl.Object = Metadata.find(caller)
-        if obj:
-            if Translate._HLSL:
-                hlsl.method_call(obj, name, args)
-        else:
-            ERR(None, "Failed to translate {0}.{1} as the object type couldn't be deduced.".format(caller, name))
+        Translate._SYMBOLS[texture.name] = texture
 
     @staticmethod
-    def constructor(ctype : str, args):
+    def _parameter(arg : pysl.FunctionArg):
+        """Writes a function parameter """
+        if (arg.type not in pysl.TYPES and(
+            arg.type not in Translate._SYMBOLS or(
+            not isinstance(Translate._SYMBOLS[arg.type], pysl.StageInput) and
+            not isinstance(Translate._SYMBOLS[arg.type], pysl.Struct)
+            ))):
+            ERR(None, "Type not found: {0}".format(arg.type))
+            return
+
         if Translate._HLSL:
-            hlsl.constructor(ctype, args)
+            if arg.out:
+                hlsl.text('out ')
+            hlsl.declaration(arg.type, arg.name)
+
+    @staticmethod
+    def function_beg(func : pysl.Function):
+        if func.stage:
+            func_in = None
+            func_out = None
+            # Special case, looking up input
+            for name, obj in Translate._SYMBOLS.items():
+                if isinstance(obj, pysl.StageInput):
+                    for stage in obj.stages:
+                        if func.stage + pysl.Keywords.In == stage:
+                            if func_in:
+                                ERR(None, "Multiple possible input values found for entry point: {0}".format(func.name))
+                            func_in = obj
+                        if func.stage + pysl.Keywords.Out == stage:
+                            if func_out:
+                                ERR(None, "Multiple possible output values found for entry point: {0}".format(func.name))
+                            func_out = obj
+
+            if func_in == None or func_out == None:
+                ERR(None, "Undeclared input or output for function stage: {0}:{1}".format(func.name, func.stage))
+                return
+            if Translate._HLSL:
+                hlsl.entry_point_beg(func, func_in, func_out)
+        else:
+            # Standard C-like function declaration
+            Translate.text('{0} {1}('.format(func.return_value, func.name))
+            for arg in func.args:
+                Translate._parameter(arg)
+            Translate.text(')\n{\n')
+            Translate._SYMBOLS[func.name] = func
+
+    @staticmethod
+    def function_end(func : pysl.Function):
+        if func.stage:
+            hlsl.entry_point_end(func)
+        else:
+            Translate.text('};\n\n')
+
+    # BLOCK-LEVEL
+    #---------------------------------------------------------------------------
+    @staticmethod
+    def declaration(assignment : Assignment):
+        """Plain old declaration, usually a ast.AnnAssign"""
+
+        # Type is either a scalar basic type
+        # or a StageInput. No other type is allowed at the block level
+        if (assignment.type not in pysl.TYPES and(
+            assignment.type not in Translate._SYMBOLS or(
+            not isinstance(Translate._SYMBOLS[assignment.type], pysl.StageInput) and
+            not isinstance(Translate._SYMBOLS[assignment.type], pysl.Struct)
+            ))):
+            ERR(None, "Type not found: {0}".format(assignment.type))
+            return
+
+        if Translate._HLSL:
+            if assignment.is_const:
+                hlsl.text('const ')
+            hlsl.declaration(assignment.type, assignment.name)
+
+    @staticmethod
+    def method_call(caller : str, name : str, args):
+        """Method calls are used simply as a stylistic way to expose intrinsics""" 
+        
+        # Right now method calls are supported exclusively by textures, thus
+        # the caller has to be registered in the symbol table
+        if caller not in Translate._SYMBOLS or not isinstance(Translate._SYMBOLS[caller], pysl.Texture):
+            ERR(None, "Expected texture object in method call: {0}".format(caller))
+            return
+
+        if Translate._HLSL:
+            hlsl.method_call(obj, name, args)
+
+    @staticmethod
+    def constructor(typename : str, args):
+        """Type constructor, assuming that typename is in pysl.TYPES""" 
+        if Translate._HLSL:
+            hlsl.constructor(typename, args)
 
     @staticmethod
     def intrinsic(itype : str, args):
+        """Intrinsic function, assuming that itype is in pysl.INTRINSICS"""
         if Translate._HLSL:
             hlsl.intrinsic(itype, args)
+
+    @staticmethod
+    def function_call(function : str, args):
+        """Function call encountered, same for both backends"""
+        if function not in Translate._SYMBOLS or not isinstance(Translate._SYMBOLS[function], pysl.Function):
+            ERR(None, "Unrecognized function name: {0}".format(function))
+            return
+
+        Translate.text('{0}('.format(function))
+        for i in range(len(args) - 1):
+            args[i]()
+            Translate.text(', ')
+        if args:
+            args[-1]()
+        Translate.text(')')
+
+    @staticmethod
+    def special_attribute(attribute : str):
+        if Translate._HLSL:
+            hlsl.special_attribute(attribute)
 
 # AST Utilities
 #-------------------------------------------------------------------------------
@@ -317,12 +441,14 @@ def parse_decorator(node : ast.AST):
                 ret.args.append(str(arg.n))
             elif isinstance(arg, ast.Str):
                 ret.args.append(str(arg.n))
+            elif isinstance(arg, ast.Name):
+                ret.args.append(arg.id)
             else:
                 v = eval_numeric_constexpr(arg)
                 if v:
                     ret.args.append(str(v))
                 else:
-                    ERR(arg, "Decorators support only literals")
+                    ERR(arg, "Unsupported decorator type")
         return ret
     else:
         ERR(node, "Supported decorators are Name and Call")
@@ -357,17 +483,30 @@ def parse_attribute_no_eval(node : ast.Attribute) -> str:
         return node.value.id
     return parse_attribute_no_eval(node.value) + '.|{0}|'.format(node.attr)
 
-# Either assignment 
 def parse_assignment(node : ast.AST) -> Assignment:
+    """Block level assignment, can either be a declaration or not"""
     if not isinstance(node, ast.Assign) and not isinstance(node, ast.AnnAssign):
         ERR(node, "Expected Assignment")
         return
 
     ret = Assignment()
     if isinstance(node, ast.AnnAssign):
+        # Declaration
         ret.name = node.target.id
-        ret.type = node.annotation.id
+        if isinstance(node.annotation, ast.Name):
+            ret.type = node.annotation.id
+            ret.is_const = False
+        elif isinstance(node.annotation, ast.Attribute) and isinstance(node.annotation.value, ast.Name):
+            if node.annotation.value.id == 'const':
+                ret.is_const = True
+            else:
+                ERR(node.annotation, "Unsupported qualifier, only const is supported in a block assignment/declaration")
+            ret.type = node.annotation.attr
+
+        else:
+            ERR(node.annotation, "Unsupported annotation, supported are <type> or const.<type>")
     else:
+        # Assignment
         if isinstance(node.targets[0], ast.Name):
             ret.name = node.targets[0].id
         elif isinstance(node.targets[0], ast.Attribute):
@@ -475,10 +614,26 @@ def cmpop_str(op : ast.AST) -> str:
 
 # Parsing declarations
 #-------------------------------------------------------------------------------
-def parse_stage_input(node : ast.ClassDef) -> pysl.StageInput:
+def parse_struct(node : ast.ClassDef) -> pysl.Struct:
+    struct = pysl.Struct()
+    struct.name = node.name
+    struct.elements = []
+
+    for decl_node in node.body:
+        if isinstance(decl_node, ast.AnnAssign):
+            assignment = parse_assignment(decl_node)
+            struct.elements.append((str_to_pysl_type(assignment.type), assignment.name))
+        else:
+            ERR(decl_node, "Unrecognized node inside structure: {0}".format(struct.name))
+
+    return struct
+
+
+def parse_stage_input(node : ast.ClassDef, stages : str) -> pysl.StageInput:
     struct = pysl.StageInput()
     struct.name = node.name
     struct.elements = []
+    struct.stages = stages
 
     conditions = []
     for decl_node in node.body:
@@ -489,7 +644,7 @@ def parse_stage_input(node : ast.ClassDef) -> pysl.StageInput:
             element.type = str_to_pysl_type(assignment.type)
             element.semantic = assignment.value
             element.conditions = list(conditions)
-            conditions[:] = []
+            conditions[:] = [] #Copy
             struct.elements.append(element)
 
         elif isinstance(decl_node, ast.Expr) and isinstance(decl_node.value, ast.Call):
@@ -573,36 +728,40 @@ def parse_texture(name : str, ttype : str, slot : int, value : ast.AST) -> pysl.
 def PYSL_eval_closure(node):
     return lambda : PYSL_eval(node) 
 
-# This is the core routines, it doesn't return anything, as stated earlier the
-# translation is strictly single pass
 def PYSL_eval(node : ast.AST):
+    """Core routine, doesn't return anything but directly writes to output"""
     if not node:
         return
     elif isinstance(node, ast.Call):
-        # Method call
+        # Calls can be of different types
+        # - Method call, this is true IFF the function itself is an attribute.
+        #   as custom objects are not part of the language, it is probably going to be  a
         if isinstance(node.func, ast.Attribute):
             Translate.method_call(node.func.value.id, node.func.attr, [PYSL_eval_closure(n) for n in node.args])
+        # - Intrinsics, that is any kind of built in function 
         elif node.func.id in pysl.INTRINSICS:
             Translate.intrinsic(node.func.id, [PYSL_eval_closure(n) for n in node.args])
-        elif node.func.id in pysl.CONSTRUCTORS:
+        # - Constructor, just a new type being declared
+        elif node.func.id in pysl.TYPES:
             Translate.constructor(node.func.id, [PYSL_eval_closure(n) for n in node.args])
+        # - '_' is the special code for the preprocessor, writes the string contained in the braces as it is
         elif node.func.id is '_':
             Translate.text(parse_preprocessor(node) + '\n\n')
-        else: # User Routine
-            Translate.text('{0}('.format(node.func.id))
-            for i in range(len(node.args) - 1):
-                PYSL_eval(node.args[i])
-                Translate.text(', ')
-            if node.args:
-                PYSL_eval(node.args[-1])
-            Translate.text(')')
-
+        # - As we didnt' recognize the name, it is probably a user's routine
+        else: 
+            Translate.function_call(node.func.id, [PYSL_eval_closure(n) for n in node.args])
 
     elif isinstance(node, ast.Attribute):
-        PYSL_eval(node.value)
+        # node.attr is the attribute name (string), recursively evaluating the value
+        if isinstance(node.value, ast.Name) and (node.value.id == pysl.Keywords.InputValue or node.value.id == pysl.Keywords.OutputValue):
+            Translate.special_attribute(node.value.id)
+        else:
+            PYSL_eval(node.value)
+    
         Translate.text('.{0}'.format(node.attr))
 
     elif isinstance(node, ast.IfExp):
+        # Ternary if
         PYSL_eval(node.test)
         Translate.text(' ? ')
         PYSL_eval(node.body)
@@ -619,10 +778,15 @@ def PYSL_eval(node : ast.AST):
         # Checking if it's a cast operation
         op_str = binop_str(node.op)
         if op_str == '@':
-            Translate.text('(')
-            PYSL_eval(node.left)
-            Translate.text(')')
-            PYSL_eval(node.right)
+            if not isinstance(node.left, ast.Name):
+                ERR(node.left, "Expected type to the left of the cast operator");
+            elif node.left.id not in pysl.TYPES:
+                ERR(node.left, "Invalid destination type: {0}".format(node.left.id))
+            else:
+                Translate.text('(')
+                PYSL_eval(node.left)
+                Translate.text(')')
+                PYSL_eval(node.right)
         else:
             PYSL_eval(node.left)
             Translate.text(' {0} '.format(op_str))
@@ -681,12 +845,14 @@ def PYSL_eval(node : ast.AST):
         PYSL_eval(node.value)
 
     else:
-        ERR(node, "PYSL_eval : Unsupported expression")
+        print(node)
+        ERR(node, "PYSL : Unsupported expression")
 
 def INDENT(indent : int):
     Translate.text('\t' * indent)
 
 def PYSL_block(nodes : [ast.AST], indent : int):
+    """Evaluates line by line all the instructions"""
     for node in nodes:
         if isinstance(node, ast.Pass):
             pass
@@ -824,10 +990,54 @@ def PYSL_block(nodes : [ast.AST], indent : int):
             Translate.text('break;\n')
 
         else:
-            ERR(node, "Unsupported block node type")
+            ERR(node, "Unsupported block expression")
 
-# Top level resource declaration
+def PYSL_arg(func : ast.FunctionDef, arg : ast.arg) -> pysl.FunctionArg:
+    if isinstance(arg.annotation, ast.Name):
+        return pysl.FunctionArg(arg.annotation.id, arg.arg, False)
+    elif isinstance(arg.annotation, ast.Attribute) and isinstance(arg.annotation.value, ast.Name):
+        if arg.annotation.value.id == 'out':
+            return pysl.FunctionArg(arg.annotation.attr, arg.arg, True)
+    else:
+        ERR(arg, "Expected type for parameter: {0} of function: {1}".format(arg.arg, func.name))
+        return pysl.FunctionArg(None, None, None)
+
+def PYSL_function_signature(func : ast.FunctionDef):
+    ret = pysl.Function()
+    ret.name = func.name
+    ret.args = []
+
+    if len(func.decorator_list) > 2:
+        ERR(func, "Multiple decorators are not supported, only the first one will be processed")
+
+    # Entry point or user-defined function ?
+    if func.decorator_list:
+        if isinstance(func.decorator_list[0], ast.Name):
+            decorator = func.decorator_list[0].id
+            if decorator in pysl.Keywords.FunctionDecorators:
+                ret.stage = decorator
+            else:
+                ERR(func.decorator_list[0], "Unknown decorator: {0}".format(func.decorator_list[0].id))             
+        else:
+            ERR(func.decorator_list, "Expected name as decorator")
+
+    if isinstance(func.returns, ast.Name) and ret.stage:
+        ERR(func, "superfluous return type for entry point (already known): {0}".format(func.name))
+    elif isinstance(func.returns, ast.Name):
+        ret.return_value = func.returns.id
+
+    # Parsing arguments
+    for arg in func.args.args[:-1]:
+        ret.args.append(PYSL_arg(func, arg))
+    if func.args.args:
+        ret.args.append(PYSL_arg(func, func.args.args[-1]))
+
+    Translate.function_beg(ret)
+    PYSL_block(func.body, 1)
+    Translate.function_end(ret)
+
 def PYSL_tl_decl(node : ast.AnnAssign):
+    """Parses a specific top-level declaration"""
     res_name = node.target.id
     res_type = None
     res_slot = None
@@ -848,39 +1058,10 @@ def PYSL_tl_decl(node : ast.AnnAssign):
     elif res_type[:7] == pysl.Keywords.TextureConstructor:
         Translate.texture(parse_texture(res_name, res_type, res_slot, node.value))
     else:
-        ERR(node, "Unrecognized type: {0} for top-level declaration: {1}".format(res_type, res_name))
-
-def PYSL_function_signature(func : ast.FunctionDef):
-    if not isinstance(func.returns, ast.Name):
-        ERR(func, "Expected return type for function: {0}".format(func.name))
-        return
-
-    if len(func.decorator_list) > 2:
-        ERR(func, "Multiple decorators are not supported, only the first one will be processed")
-
-    if func.decorator_list:
-        if isinstance(func.decorator_list[0], ast.Name):
-            Metadata.entry_point(func.decorator_list[0].id, func.name)
-        else:
-            ERR(func.decorator_list, "Expected name as decorator")
-
-    Translate.text('{0} {1}('.format(func.returns.id, func.name))
-    for arg in func.args.args[:-1]:
-        if not isinstance(arg.annotation, ast.Name):
-            ERR(arg, "Expected type for parameter: {0} of function: {1}".format(arg.arg, func.name))
-        else:
-            print(arg.value)
-            Translate.text('{0} {1}, '.format(arg.annotation.id, arg.arg))
-
-    if func.args.args:
-        arg = func.args.args[-1];
-        if not isinstance(arg.annotation, ast.Name):
-            ERR(arg, "Expected type for parameter: {0} of function: {1}".format(arg.arg, func.name))
-        else:
-            Translate.text('{0} {1}'.format(arg.annotation.id, arg.arg))
-    Translate.text(')\n{\n')        
+        ERR(node, "Unrecognized type: {0} for top-level declaration: {1}".format(res_type, res_name))       
 
 def PYSL(path : str):
+    """Finds all the top-level nodes"""
     try:
         with open(path, 'r') as file:
             text = file.read()
@@ -896,14 +1077,20 @@ def PYSL(path : str):
 
     for node in ast.iter_child_nodes(root):
         if isinstance(node, ast.ClassDef):
-            # Stage input
+            # If no decorators, it is simply a user-defined structure
             if not node.decorator_list:
-                Translate.stage_input(parse_stage_input(node))
+                Translate.decl_struct(parse_struct(node))
             else:
                 decorator = parse_decorator(node.decorator_list[0])
-                if decorator.name is pysl.Keywords.StageInputDecorator:
-                    Translate.stage_input(parse_stage_input(node))
-                elif decorator.name is pysl.Keywords.ConstantBufferDecorator:
+                if decorator.name == pysl.Keywords.StageInputDecorator:
+                    stages = []
+                    for arg in decorator.args:
+                        if arg in pysl.Keywords.StageInputDecorators:
+                            stages.append(arg)
+                        else:
+                            ERR(decorator, "Unrecognized stageinput decorator: {0}".format(arg))
+                    Translate.decl_stage_input(parse_stage_input(node, stages))
+                elif decorator.name == pysl.Keywords.ConstantBufferDecorator:
                     Translate.constant_buffer(parse_constant_buffer(node))
                 else:
                     ERR(node, "Unsupported decorator: {0}".format(decorator.name))
@@ -912,8 +1099,6 @@ def PYSL(path : str):
 
         elif isinstance(node, ast.FunctionDef):
             PYSL_function_signature(node)
-            PYSL_block(node.body, 1)
-            Translate.text('};\n\n')
 
         elif isinstance(node, ast.Assign):
             ERR(node, "Encountered untyped assignment")
@@ -930,8 +1115,7 @@ def PYSL(path : str):
                 ERR(node, "Unsupported top-level expression")
 
         else:
-            print(node)
-            ERR(node, "PYSL : Unsupported expression")
+            ERR(node, "Unsupported top-level expression")
 
 if __name__ == '__main__':
     if (len(sys.argv) < 2):

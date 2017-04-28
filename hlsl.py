@@ -39,6 +39,12 @@ def options(options : [str]):
         OUT('#\tdefine {0}\n'.format(opt))
     OUT('#endif\n\n')
 
+def struct(struct : pysl.Struct):
+    OUT('struct {0}\n{{\n'.format(struct.name))
+    for element in struct.elements:
+        OUT('\t{0} {1};\n'.format(TYPE(element[0]), element[1]))
+    OUT('};\n\n')
+
 def stage_input(struct : pysl.StageInput):
     OUT('struct {0}\n{{\n'.format(struct.name))
     for element in struct.elements:
@@ -51,6 +57,16 @@ def stage_input(struct : pysl.StageInput):
 
 def declaration(type : str, name : str):
     OUT('{0} {1}'.format(type, name))
+
+def entry_point_beg(func : pysl.Function, sin : pysl.StageInput, sout : pysl.StageInput):
+    OUT('{0} {1}('.format(sout.name, func.name))
+    OUT('{0} {1}'.format(sin.name, pysl.Keywords.InputValue))
+    OUT(')\n{\n')
+    OUT('\t{0} {1};\n'.format(sout.name, pysl.Keywords.OutputValue))
+
+def entry_point_end(func : pysl.Function):
+    OUT('\treturn {0};\n'.format(pysl.Keywords.OutputValue))
+    OUT('};\n\n')
 
 def constant_buffer(cbuffer : pysl.ConstantBuffer):
     OUT('cbuffer {0}\n{{\n'.format(cbuffer.name))
@@ -93,3 +109,6 @@ def intrinsic(itype : str, args):
     OUT('{0}('.format(itype))
     _args(args)
     OUT(')')
+
+def special_attribute(attribute : str):
+    OUT(attribute)
