@@ -152,9 +152,9 @@ class Metadata:
             Metadata._ROOT[pysl.Keywords.OptionsKey] += options
 
 class Translate:
-    _HLSL = False
-    _GLSL = False
-    _SYMBOLS = None
+    _HLSL : bool = False
+    _GLSL : bool = False
+    _SYMBOLS : dict = None
 
     @staticmethod
     def init(hlsl_path : str, glsl_path : str) -> bool:
@@ -163,6 +163,10 @@ class Translate:
             Translate._HLSL = hlsl5.init(hlsl_path)
             if not Translate._HLSL:
                 return False
+        if glsl_path:
+            Translate._GLSL = glsl45.init(glsl_path)
+            if not Translate._GLSL:
+                return False
         Translate._SYMBOLS = { } 
         return True
 
@@ -170,7 +174,9 @@ class Translate:
     def text(string : str):
         """Writes text directly to the output such as preprocessor strings"""
         if Translate._HLSL:
-            hlsl5.OUT(string)
+            hlsl5.write(string)
+        if Translate._GLSL:
+            glsl45.write(string)
 
     # TOP-LEVEL
     #---------------------------------------------------------------------------
@@ -182,6 +188,8 @@ class Translate:
         # HlslTools helper: https://github.com/tgjones/HlslTools
         if Translate._HLSL:
             hlsl5.options(strings)
+        if Translate._GLSL:
+            glsl45.options(strings)
 
     @staticmethod
     def decl_struct(struct : pysl.Struct):
@@ -191,20 +199,24 @@ class Translate:
 
         if Translate._HLSL:
             hlsl5.struct(struct)
+        if Translate._GLSL:
+            glsl45.struct(struct)
 
         Translate._SYMBOLS[struct.name] = struct
 
     @staticmethod
-    def decl_stage_input(struct : pysl.StageInput):
+    def decl_stage_input(si : pysl.StageInput):
         """Stage input declaration"""
-        if struct.name in Translate._SYMBOLS:
-            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[struct.name]))
+        if si.name in Translate._SYMBOLS:
+            ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[si.name]))
             return
 
         if Translate._HLSL:
-            hlsl5.stage_input(struct)
+            hlsl5.stage_input(si)
+        if Translate._GLSL:
+            glsl45.stage_input(si)
 
-        Translate._SYMBOLS[struct.name] = struct
+        Translate._SYMBOLS[si.name] = si
 
     @staticmethod
     def constant_buffer(cbuffer : pysl.ConstantBuffer):
@@ -216,6 +228,8 @@ class Translate:
         Metadata.constant_buffer_attrs(cbuffer)
         if Translate._HLSL:
             hlsl5.constant_buffer(cbuffer)
+        if Translate._GLSL:
+            glsl45.constant_buffer(cbuffer)
 
         Translate._SYMBOLS[cbuffer.name] = cbuffer
 
@@ -229,6 +243,8 @@ class Translate:
         Metadata.sampler_attrs(sampler)
         if Translate._HLSL:
             hlsl5.sampler(sampler)
+        if Translate._GLSL:
+            glsl45.sampler(sampler)
 
         Translate._SYMBOLS[sampler.name] = sampler
 
@@ -245,6 +261,8 @@ class Translate:
 
         if Translate._HLSL:
             hlsl5.declaration(arg)
+        if Translate._GLSL:
+            glsl45.declaration(arg)
 
     @staticmethod
     def function_beg(func : pysl.Function):
@@ -269,6 +287,8 @@ class Translate:
                 return
             if Translate._HLSL:
                 hlsl5.entry_point_beg(func, func_in, func_out)
+            if Translate._GLSL:
+                glsl45.entry_point_beg(func, func_in, func_out)
         else:
             # Standard C-like function declaration
             Translate.text('{0} {1}('.format(func.return_value, func.name))
@@ -280,7 +300,10 @@ class Translate:
     @staticmethod
     def function_end(func : pysl.Function):
         if func.stage:
-            hlsl5.entry_point_end(func)
+            if Translate._HLSL:
+                hlsl5.entry_point_end(func)
+            if Translate._GLSL:
+                glsl45.entry_point_end(func)
         else:
             Translate.text('};\n\n')
 
@@ -302,6 +325,8 @@ class Translate:
 
         if Translate._HLSL:
             hlsl5.declaration(assignment)
+        if Translate._GLSL:
+            glsl45.declaration(assignment)
 
     @staticmethod
     def method_call(caller : str, name : str, args):
@@ -318,18 +343,24 @@ class Translate:
 
         if Translate._HLSL:
             hlsl5.method_call(obj, name, args)
+        if Translate._GLSL:
+            glsl45.method_call(obj, name, args)
 
     @staticmethod
     def constructor(typename : str, args):
         """Type constructor, assuming that typename is in pysl.TYPES""" 
         if Translate._HLSL:
             hlsl5.constructor(typename, args)
+        if Translate._GLSL:
+            glsl45.constructor(typename, args)
 
     @staticmethod
-    def intrinsic(itype : str, args):
+    def intrinsic(type : str, args):
         """Intrinsic function, assuming that itype is in pysl.INTRINSICS"""
         if Translate._HLSL:
-            hlsl5.intrinsic(itype, args)
+            hlsl5.intrinsic(type, args)
+        if Translate._GLSL:
+            glsl45.intrinsic(type, args)
 
     @staticmethod
     def function_call(function : str, args):
@@ -350,6 +381,8 @@ class Translate:
     def special_attribute(attribute : str):
         if Translate._HLSL:
             hlsl5.special_attribute(attribute)
+        if Translate._GLSL:
+            glsl45.special_attribute(attribute)
 
 # AST Utilities
 #-------------------------------------------------------------------------------
