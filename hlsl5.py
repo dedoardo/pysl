@@ -74,10 +74,7 @@ def entry_point_end(func : pysl.Function):
 def constant_buffer(cbuffer : pysl.ConstantBuffer):
     write('cbuffer {0}\n{{\n'.format(cbuffer.name))
     for constant in cbuffer.constants:
-        write('\t{0} {1}'.format(TYPE(constant.type), constant.name))
-        if constant.offset is not None:
-            write(' : packoffset({0})'.format(OFFSET_TO_CONSTANT(constant.offset)))
-        write(';\n')
+        write('\t{0} {1} : packoffset{2};\n'.format(TYPE(constant.type), constant.name, OFFSET_TO_CONSTANT(constant.offset)))
 
     if cbuffer.enforced_size is not None:
         write('\tfloat __pysl_padding : packoffset({0});\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
@@ -88,7 +85,24 @@ def TEXTURE_NAME_FROM_SAMPLER(sampler_name : str) -> str:
     return sampler_name + '__tex'
 
 def sampler(sampler : pysl.Sampler):
-    texture_type = sampler.type
+    texture_type_map = [
+        'Texture1D',
+        'Texture2D',
+        'Texture3D',
+        'TextureCube',
+        'Texture1DArray',
+        'Texture2DArray',
+        'Texture2DMS',
+        'Texture2DArray',
+        'TextureCubeArray',
+        'Texture1D',
+        'Texture2D',
+        'Texture1DArray',
+        'Texture2DArray',
+        'TextureCube',
+        'TextureCubeArray',
+    ]
+    texture_type = texture_type_map[pysl.Keywords.SamplerTypes.index('Sampler' + sampler.type)]
     write('Texture{0} {1} : register(t{2});\n'.format(texture_type, TEXTURE_NAME_FROM_SAMPLER(sampler.name), sampler.slot))
     write('SamplerState {0} : register(s{1});\n\n'.format(sampler.name, sampler.slot))
 
@@ -120,3 +134,4 @@ def intrinsic(type : str, args):
 
 def special_attribute(attribute : str):
     write(attribute)
+    write('.')

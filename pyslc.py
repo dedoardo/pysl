@@ -759,8 +759,9 @@ def PYSL_eval(node : ast.AST):
             Translate.special_attribute(node.value.id)
         else:
             PYSL_eval(node.value)
-    
-        Translate.text('.{0}'.format(node.attr))
+            Translate.text('.')
+
+        Translate.text('{0}'.format(node.attr))
 
     elif isinstance(node, ast.IfExp):
         # Ternary if
@@ -1052,7 +1053,7 @@ def PYSL_tl_decl(node : ast.AnnAssign):
     res_slot = node.annotation.args[1].n
 
     if res_type in pysl.Keywords.SamplerTypes:
-        Translate.sampler(parse_sampler(res_name, res_type, res_slot, node.value))
+        Translate.sampler(parse_sampler(res_name, res_type[7:], res_slot, node.value))
     else:
         ERR(node, "Unrecognized top-level resource declaration {0} : {1}".format(res_name, res_type))    
 

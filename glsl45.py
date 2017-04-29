@@ -31,6 +31,9 @@ def TYPE(type : pysl.Type):
     ]
     return type_map[pysl.TYPES.index(type.str)]
 
+def OFFSET_TO_CONSTANT(offset : int):
+    return offset * 4
+
 def declaration(declaration : pysl.Declaration):
     for qualifier in declaration.qualifiers:
         write('{0} '.format(qualifier))
@@ -87,29 +90,42 @@ def stage_input(si : pysl.StageInput, prev_sis : [pysl.StageInput]):
             is_builtin = True if element.semantic[:3] == 'SV_' else False
             if element.semantic.startswith(pysl.Keywords.SVTargetSemantic):
                 slot = int(element.semantic[(len(pysl.Keywords.SVTargetSemantic)):])
-                write('layout(location={0}) out {1} {2};\n'.format(slot, TYPE(element.type), element.name))
+                write('layout(location={0}) out {1} __{2}_{3};\n'.format(slot, TYPE(element.type), dest_qualifier, element.name))
             elif is_builtin:
-                write('{0} {1} {2};\n'.format(dest_qualifier, TYPE(element.type), SEMANTIC(element.semantic)))
+                write('{0} {1} __{2}_{3};\n'.format(dest_qualifier, TYPE(element.type), dest_qualifier, SEMANTIC(element.semantic)))
             else:
-                write('layout (location={0}) {1} {2} {3};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type), element.name))
+                write('layout (location={0}) {1} {2} __{3}_{4};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type), dest_qualifier, element.name))
         write('#endif\n\n')
 
 def entry_point_beg(func : pysl.Function, sin : pysl.StageInput, sout : pysl.StageInput):
-    pass
+    if func.stage == pysl.Keywords.VertexShaderDecorator:
+        write('#if defined(PYSL_VERTEX_SHADER)\n')
+    elif func.stage == pysl.Keywords.PixelShaderDecorator:
+        write('#if defined(PYSL_PIXEL_SHADER)\n')
+    write('void {0}()\n{{\n'.format(func.name))
 
 def entry_point_end(func : pysl.Function):
-    pass
+    write('};\n')
+    write('#endif\n\n')
 
 def constant_buffer(cbuffer : pysl.ConstantBuffer):
-    pass
+    write('layout(std140) uniform {0}\n{{\n'.format(cbuffer.name))
+    for constant in cbuffer.constants:
+        write('\tlayout(offset = {0}) {1} {2};\n'.format(OFFSET_TO_CONSTANT(constant.offset), TYPE(constant.type), constant.name))
+    if cbuffer.enforced_size is not None:
+        write('\tlayout(offset = {0}) float __pysl_padding;\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
+    write('};\n\n')
 
 def sampler(sampler : pysl.Sampler):
-    pass
+    sampler_type = 'sampler' + sampler.type
+    write('uniform {0} {1};\n'.format(sampler_type, sampler.name))
 
 # Block-level
 #-------------------------------------------------------------------------------
 def method_call(caller : pysl.Object, method : str, args):
-    pass
+    if caller:
+        if isinstance(caller, pysl.Sampler):
+            
 
 def constructor(type : str, args):
     pass
@@ -118,4 +134,7 @@ def intrinsic(type : str, args):
     pass
 
 def special_attribute(attribute : str):
-    pass
+    if attribute == pysl.Keywords.InputValue:
+        write('__in_')
+    elif attribute == pysl.Keywords.OutputValue:
+        write('__out_')
