@@ -182,22 +182,9 @@ TYPES = [
     'int', 'int2', 'int3', 'int4',
     'uint', 'uint2', 'uint3', 'uint4',
     'float', 'float2', 'float3', 'float4',
-    'bool1x1', 'bool1x2', 'bool1x3', 'bool1x4',
-    'bool2x1', 'bool2x2', 'bool2x3', 'bool2x4',
-    'bool3x1', 'bool3x2', 'bool3x3', 'bool3x4',
-    'bool4x1', 'bool4x2', 'bool4x3', 'bool4x4',
-    'int1x1', 'int1x2', 'int1x3', 'int1x4',
-    'int2x1', 'int2x2', 'int2x3', 'int2x4',
-    'int3x1', 'int3x2', 'int3x3', 'int3x4',
-    'int4x1', 'int4x2', 'int4x3', 'int4x4',
-    'uint1x1', 'uint1x2', 'uint1x3', 'uint1x4',
-    'uint2x1', 'uint2x2', 'uint2x3', 'uint2x4',
-    'uint3x1', 'uint3x2', 'uint3x3', 'uint3x4',
-    'uint4x1', 'uint4x2', 'uint4x3', 'uint4x4',
-    'float1x1', 'float1x2', 'float1x3', 'float1x4',
-    'float2x1', 'float2x2', 'float2x3', 'float2x4',
-    'float3x1', 'float3x2', 'float3x3', 'float3x4',
-    'float4x1', 'float4x2', 'float4x3', 'float4x4'
+    'float2x2', 'float2x3', 'float2x4',
+    'float3x2', 'float3x3', 'float3x4',
+    'float4x2', 'float4x3', 'float4x4'
 ]
 
 class Keywords:
@@ -218,6 +205,13 @@ class Keywords:
     StageInputDecorators = [VertexShaderInputDecorator, VertexShaderOutputDecorator, PixelShaderInputDecorator, PixelShaderOutputDecorator]
     StageInputDecorator = 'StageInput'
     ConstantBufferDecorator = 'ConstantBuffer'
+
+    # Semantics
+    SVPositionSemantic = 'SV_Position'
+    SVVertexIDSemantic = 'SV_VertexID'
+    SVInstanceIDSemantic = 'SV_InstanceID'
+    SVTargetSemantic = 'SV_Target'
+    Semantics = [SVPositionSemantic, SVVertexIDSemantic, SVInstanceIDSemantic, SVTargetSemantic]
 
     # Opaque types
     SamplerTypes = ['Sampler1D', 'Sampler2D', 'Sampler3D', 'SamplerCube', 'Sampler1DArray', 'Sampler2DArray', 'Sampler2DMS', 'Sampler2DMSArray', 'SamplerCubeArray', 'Sampler1DShadow', 'Sampler2DShadow', 'Sampler1DArrayShadow', 'Sampler2DArrayShadow', 'SamplerCubeShadow', 'SamplerCubeArrayShadow']

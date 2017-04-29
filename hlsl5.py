@@ -31,7 +31,7 @@ def OFFSET_TO_CONSTANT(offset : int):
     elif offset % 4 == 3:
         coff += '.w'
     return coff
-    
+
 def declaration(declaration : pysl.Declaration):
     for qualifier in declaration.qualifiers:
         write('{0} '.format(qualifier))
@@ -51,7 +51,7 @@ def struct(struct : pysl.Struct):
         write('\t{0} {1};\n'.format(TYPE(element[0]), element[1]))
     write('};\n\n')
 
-def stage_input(si : pysl.StageInput):
+def stage_input(si : pysl.StageInput, prev_sis : [pysl.StageInput]):
     write('struct {0}\n{{\n'.format(si.name))
     for element in si.elements:
         for cond in element.conditions:

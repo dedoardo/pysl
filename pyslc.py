@@ -211,10 +211,11 @@ class Translate:
             ERR(None, "Already defined symbol: {0} as {1}".format(Translate._SYMBOLS, Translate._SYMBOLS[si.name]))
             return
 
+        prev_sis = [v for k, v in Translate._SYMBOLS.items() if isinstance(v, pysl.StageInput)]
         if Translate._HLSL:
-            hlsl5.stage_input(si)
+            hlsl5.stage_input(si, prev_sis)
         if Translate._GLSL:
-            glsl45.stage_input(si)
+            glsl45.stage_input(si, prev_sis)
 
         Translate._SYMBOLS[si.name] = si
 
