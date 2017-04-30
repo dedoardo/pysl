@@ -343,25 +343,37 @@ class Translate:
         obj = Translate._SYMBOLS[caller]
 
         if Translate._HLSL:
+            old, Translate._GLSL = Translate._GLSL, False
             hlsl5.method_call(obj, name, args)
+            Translate._GLSL = old
         if Translate._GLSL:
+            old, Translate._HLSL = Translate._HLSL, False
             glsl45.method_call(obj, name, args)
+            Translate._HLSL = old
 
     @staticmethod
     def constructor(typename : str, args):
         """Type constructor, assuming that typename is in pysl.TYPES""" 
         if Translate._HLSL:
+            old, Translate._GLSL = Translate._GLSL, False
             hlsl5.constructor(typename, args)
+            Translate._GLSL = old
         if Translate._GLSL:
+            old, Translate._HLSL = Translate._HLSL, False
             glsl45.constructor(typename, args)
+            Translate._HLSL = old
 
     @staticmethod
     def intrinsic(type : str, args):
         """Intrinsic function, assuming that itype is in pysl.INTRINSICS"""
         if Translate._HLSL:
+            old, Translate._GLSL = Translate._GLSL, False
             hlsl5.intrinsic(type, args)
+            Translate._GLSL = old
         if Translate._GLSL:
+            old, Translate._HLSL = Translate._HLSL, False
             glsl45.intrinsic(type, args)
+            Translate._HLSL = old
 
     @staticmethod
     def function_call(function : str, args):

@@ -217,7 +217,13 @@ class Keywords:
     SamplerTypes = ['Sampler1D', 'Sampler2D', 'Sampler3D', 'SamplerCube', 'Sampler1DArray', 'Sampler2DArray', 'Sampler2DMS', 'Sampler2DMSArray', 'SamplerCubeArray', 'Sampler1DShadow', 'Sampler2DShadow', 'Sampler1DArrayShadow', 'Sampler2DArrayShadow', 'SamplerCubeShadow', 'SamplerCubeArrayShadow']
     SamplerTypeExts = [t[7:] for t in SamplerTypes]
     Export = 'export'
-    
+    SamplerSampleMethod = 'Sample'
+    SamplerLoadMethod = 'Load'
+    SamplerSampleGradMethod = 'SampleGrad'
+    SamplerSampleLevelMethod ='SampleLevel'
+    SamplerGatherMethod = 'Gather'
+    SamplerMethods = [SamplerSampleMethod, SamplerLoadMethod, SamplerSampleGradMethod, SamplerSampleLevelMethod, SamplerGatherMethod]
+
     # Special values
     InputValue = 'input'
     OutputValue = 'output'
