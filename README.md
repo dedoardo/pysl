@@ -1,5 +1,13 @@
 # PYSL
-PYthon Shading Language Compiler
+PYthon Shading Language compiler
+
+This is not a full-fledged compiler. It's purpose is to take a shader written in PYSL and translate it the best way possible. There are some checks around, but rewriting an entire compiler was not the purpose as it would be redundant. The general idea is:
+- If some syntax is shared between the backend languages, **no checking** is done as the compiler will complain anyway
+- If there are collision in semantics/syntax then indeed checks are done and code is modified accordingly
+- Parameter types are not checked. If you try to sample a `sampler2D` with a single integer I'll let the backend compiler complain
+- Every time you use an intrinsic or a method check the documentation. Translations are usually pretty straightforward, but there might be some caveats (e.g. Combination of offsets/multisample in `Sampler::Load` when translating to GLSL). Usually the inconsistencies are reported.
+
+This is not the ultimate solution, it just aims are saving you *95%* of the work, further optimization or tweaks might have to be done and *should* be done, this is possible because the compilation output is readable and still high-level. Nonetheless the outputs are valid and with some attention complex and valid shaders can be written without later tweaking.
 
 Outputs:
 HLSL SM5.0
@@ -7,6 +15,25 @@ GLSL `#version 450`
 
 TL = top-level (global scope)
 BL = block-level (inside a function or nested functions scope)
+
+### `pyslc`
+```ruby
+usage: pyslc.py [-h] [-ohlsl5 OHLSL5] [-oglsl45 OGLSL45] [-ojson OJSON]
+                [-ohpp OHPP]
+                output
+
+PYthon Shading Language Compiler
+
+positional arguments:
+  output
+
+optional arguments:
+  -h, --help        show this help message and exit
+  -ohlsl5 OHLSL5    HLSL destination path
+  -oglsl45 OGLSL45  GLSL destination path
+  -ojson OJSON      JSON metadata destination path
+  -ohpp OHPP        C++ header destination path
+```
 ### Types(ALL)
 Non-opaque types follow the HLSL syntax. 
 Supported scalar types:
@@ -26,6 +53,19 @@ Currently casting is done via the `@` operator following the syntax:
 `<dest_type>@<name>`
 That gets translated to
 `(<dest_type>)<name>`
+
+### Swizzling
+Swizzling is valid as in HLSL / GLSL. Two sets:
+`rgba`
+`xyzw`
+They sets can't be mixed together:
+```c
+val : float3 = { 1.0, 2.0, 3.0 }
+tmp : float3 = val.xya #INVALID 
+tmp : float3 = val.xyw #OK
+tmp : float3 = val.rga #OK
+```
+As the swizzling is the same in HLSL and GLSL no checking is actually done
 
 ### Qualifiers(TL, BL)
 Qualifiers are associated with a type and follow the syntax:
@@ -133,7 +173,7 @@ This is just how translation works, for more details regarding allowed parameter
 #### `Sample`
 
 ```xml
-<sampler>.Sample(<uv>, <bias|cmp> [,<offset>])
+<sampler>.Sample(<uv>, [<bias|cmp> [,<offset>]])
 ---
 <uv>: Texture coordinates in normalized space, the number of dimensions depends on the <sampler>'s type works the same in HLSL/GLSL
 <bias|cmp>: If <sampler> is shadow the second parameters indicates the lod bias, otherwise the value to be compared against
@@ -141,31 +181,38 @@ This is just how translation works, for more details regarding allowed parameter
 ```
 ```xml
 if <sampler>.isShadow():
-    HLSL: <texture>.SampleCmp(<sampler>, <uv>, <cmp>) <texture>.SampleCmp(<sampler>, <uv>, <bias|cmp>, <offset>)
+    HLSL: <texture>.SampleCmp(<sampler>, <uv>, <cmp>) <texture>.SampleCmp(<sampler>, <uv>, <cmp>, <offset>)
     GLSL: texture(<sampler>, <uv, cmp>) textureOffset(<sampler>, <uv,cmp>, <offset>)
 else:
-    HLSL: <texture>.SampleBias(<sampler>, <uv>, <bias>) <texture>.Sample(<sampler>, <uv>, <bias>, <offset>)
+    HLSL: <texture>.SampleBias(<sampler>, <uv>, <bias>)
     GLSL: texture(<sampler>, <uv>, <bias>) textureOffset(<sampler>, <uv>, <offset>, <bias>)
 ```
 
-#### `Load`
-**NO SHADOW**
+##### `Load`
+**NO Shadow**
 **NO SamplerCube, SamplerCubeArray**
+Miplevel is ignored if texture is multisampled, just specify 0. 
+This is because multisample textures have no miplevels.
+Offset cannot be applied to multisampled textures, GLSL has no overload for it.
 ```xml
-<sampler>.Load(<texel_coord>, <miplevel> [,<offset>] [,<sample>])
+<sampler>.Load(<texel_coord>, <miplevel> [,<offset|sample>])
 ---
 <texel_coord>: Texture coordinates in **texel-space**.
 <miplevel>: Mipmap level to sample from (LOD).
-<offset>: Integer offset in **texel-space** to be added to the <uv>.
-<sample>: If <sampler> is multi-sample then indicates the index of the sample to take
+<offset|sample>: If <sampler> is multi-sample then indicates the index of the sample to take otherwise indicates the integer offset in **texel-space** to be added to the <uv>
 ```
-
 ```xml
-HLSL: <texture>.Load(<sampler>, <texel_coord, miplevel>, <sample>, <offset>)
+if <sampler>.isMultiSample()
+    HLSL: <texture>.Load(<sampler>, <texel_coord>, <sample>)
+else:
+    HLSL: <texture>.Load(<sampler>, <texel_coord, miplevel>, 0, <offset>)
+
 GLSL: texelFetch(<sampler>, <texel_coord>, <miplevel>, <sample>) texelFetchOffset(<sampler>, <texel_coord>, <miplevel>, <offset>) 
 ```
 
-#### `SampleGrad`
+##### `SampleGrad`
+**No Shadow**
+**No multisample**
 ```xml
 <sampler>.SampleGrad(<uv>, <ddx>, <ddy>)
 ---
@@ -180,7 +227,7 @@ HLSL: <texture>.SampleGrad(<sampler>, <uv>, <ddx>, <ddy>)
 GLSL: textureGrad(<sampler>, <uv>, <ddx>, <ddy>)
 ```
 
-#### `SampleLevel`
+##### `SampleLevel`
 ```xml
 <sampler>.SampleLevel(<uv>, <miplevel>)
 ---
@@ -193,7 +240,9 @@ HLSL: <texture>.SampleLevel(<sampler>, <uv>, <miplevel>)
 GLSL: textureLod(<sampler>, <uv>, <miplevel>)
 ```
 
-#### `Gather`
+##### `Gather`
+** No Sampler1Dxxx, Sampler3Dxxx, No multisampled**
+<channel> has to be a number literal. Constant integer expression are not supported
 ```xml
 <sampler>.Gather(<uv>, <channel|cmp> [,<offset>])
 ---
@@ -203,24 +252,29 @@ GLSL: textureLod(<sampler>, <uv>, <miplevel>)
 
 ```xml
 if <sampler>.isShadow():
-    HLSL: <texture>.GatherCmp[Red|Green|Blue|Alpha](<sampler>, <uv>, <cmp>, [<offset>, 0])
+    HLSL: <texture>.GatherCmp(<sampler>, <uv>, <cmp>, [<offset>, 0])
     GLSL: textureGather(<sampler>, <uv>, <cmp>) textureGatherOffset(<sampler>, <uv>, <cmp>, <offset>)
 else:
     HLSL: <texture>.Gather[Red|Green|Blue|Alpha](<sampler>, <uv>, [<offset>, 0])
     GLSL: textureGather(<sampler>, <uv>, <channel>) textureGatherOffset(<sampler>, <uv>, <offset>, <channel>)
 ```
+Offset cannot be applied to `SamplerCubexxx` as GLSL has no overload for it
 
-#### `GetDimensions`
-This one requires some wrappers for HLSL to be written as HLSL returns void and takes `out` parameters while GLSL returns a vector containing all. The idea is to use the same return semantic as OpenGL and just write a couple of free functions that emulate.
+##### `GetDimensions`
+This one requires some wrappers for HLSL to be written as HLSL returns void and takes `out` parameters while GLSL returns a vector containing all. The idea is to use the same return semantic as OpenGL and just write a couple of free functions that replicate the behavior.
 
 Notes: 
+- In order to access array add an extra coordinate to the `<uv` or `<texel_coord>`, just as you would in HLSL/GLSL
 - https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/texelFetchOffset.xhtml doesn't take a <sample>
 - <offset> as for specification mustbe a constant expression (evaluable at compile-time)
 - GLSL's `textureProj` has no mapping
 
+
+### Intrinsics
+
 # Backend
 List of methods that need to be present. All the type parameters are assumed to be valid PYSL keywords. 
-`args` are closure, just call them to automatically evaluate them.
+`args` are closures, just call them to automatically evaluate them.
 - `init(path : str) -> bool` Initializes the backend. If you need to output some header at the beginning of the file this is the time
 - `write(string : str)` Writes directly to the file. This is used by the `pyslc.Translate` in order to write out shared (C-syntax) code.
 - `declaration(pysl.Declaration)`

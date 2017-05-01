@@ -4,8 +4,10 @@ import os
 _OUT = None
 
 # Core
-#-------------------------------------------------------------------------------
-def init(path : str) -> bool:
+# ------------------------------------------------------------------------------
+
+
+def init(path: str) -> bool:
     try:
         global _OUT
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -13,13 +15,14 @@ def init(path : str) -> bool:
     except IOError as e:
         print("Failed to open file: {0} with error: {1}".format(path, e))
         return False
-
     return True
 
-def write(string : str):
+
+def write(string: str):
     _OUT.write(string)
 
-def TYPE(type : str):
+
+def TYPE(type: str):
     type_map = [
         'bool', 'bvec2', 'bvec3', 'bvec4',
         'int', 'ivec3', 'ivec3', 'ivec4',
@@ -29,43 +32,60 @@ def TYPE(type : str):
         'mat3x2', 'mat3x3', 'mat3x4',
         'mat4x2', 'mat4x3', 'mat4x4'
     ]
-    return type_map[pysl.TYPES.index(type)]
+    return type_map[pysl.Language.native_types.index(type)]
 
-def OFFSET_TO_CONSTANT(offset : int):
+
+def OFFSET_TO_CONSTANT(offset: int):
     return offset * 4
 
-def declaration(declaration : pysl.Declaration):
+
+def declaration(declaration: pysl.Declaration):
     for qualifier in declaration.qualifiers:
         write('{0} '.format(qualifier))
     write('{0} {1}'.format(declaration.type, declaration.name))
 
+
 # Top-level
-#-------------------------------------------------------------------------------
-def options(options : [str]):
+# ------------------------------------------------------------------------------
+
+
+def options(options: [str]):
     pass
 
-def struct(struct : pysl.Struct):
+
+def struct(struct: pysl.Struct):
     write('struct {0}\n{{\n'.format(struct.name))
     for element in struct.elements:
         write('\t{0} {1};\n'.format(TYPE(element[0].str), element[1]))
     write('};\n\n')
 
-def SEMANTIC(semantic : str) -> str:
-    semantic_map = [
-        'gl_Position'
-        'gl_VertexID',
-        'gl_InstanceID'
-    ]
-    return semantic_map[pysl.Keywords.Semantics.index(semantic)]
 
-def LOCATION(element : pysl.InputElement, si : pysl.StageInput, prev_sis : [pysl.StageInput], stage : str) -> int:
-    if stage[2:] == pysl.Keywords.Out:
-        return si.elements.index(element)
-    elif stage[:2] == pysl.Keywords.VertexShaderDecorator:
+def SEMANTIC(semantic: str, stage: str) -> str:
+    if stage == pysl.Language.Decorator.PixelShader and semantic == pysl.Language.Semantic.Position:
+        return 'gl_FragCoord'
+
+    semantic_map = [
+        'gl_ClipDistance',
+        'gl_CullDistance',
+        'gl_FragDepth',
+        'gl_InstanceID',
+        'gl_FrontFacing',
+        'gl_Position',
+        'gl_PrimitiveID',
+        'gl_SampleID',
+        'gl_FragStencilRef',
+        'gl_Target',
+        'gl_VertexID'
+    ]
+    return semantic_map[pysl.Language.Semantic.All.index(semantic)]
+
+
+def LOCATION(element: pysl.InputElement, si: pysl.StageInput, prev_sis: [pysl.StageInput], stage: str) -> int:
+    if stage[2:] in [pysl.Language.Decorator.Out, pysl.Language.Decorator.In]:
         return si.elements.index(element)
     else:
         # Linkings vs-ps
-        prev_stage = pysl.Keywords.VertexShaderOutputDecorator
+        prev_stage = pysl.Language.Decorator.VertexShaderOut
         for prev_si in prev_sis:
             if prev_stage in prev_si.stages:
                 # Looking for the element with the matching semantic
@@ -75,40 +95,42 @@ def LOCATION(element : pysl.InputElement, si : pysl.StageInput, prev_sis : [pysl
                 print("Unmatched semantic {0} in {1}".format(stage, si.name))
                 return -1
 
-def stage_input(si : pysl.StageInput, prev_sis : [pysl.StageInput]):
+
+def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
     for stage in si.stages:
-        stage_idx = None
-        if stage[:2] == pysl.Keywords.VertexShaderDecorator:
+        cur_stage = stage[:2]
+        if cur_stage == pysl.Language.Decorator.VertexShader:
             write('#if defined(PYSL_VERTEX_SHADER)\n')
-            stage_idx = 1
-        elif stage[:2] == pysl.Keywords.PixelShaderDecorator:
+        elif cur_stage == pysl.Language.Decorator.PixelShader:
             write('#if defined(PYSL_PIXEL_SHADER)\n')
-            stage_idx = 2
 
         dest_qualifier = stage[2:]
         for element in si.elements:
             is_builtin = True if element.semantic[:3] == 'SV_' else False
-            if element.semantic.startswith(pysl.Keywords.SVTargetSemantic):
-                slot = int(element.semantic[(len(pysl.Keywords.SVTargetSemantic)):])
+            if element.semantic.startswith(pysl.Language.Semantic.Target):  # Only valid as output
+                slot = int(element.semantic[(len(pysl.Language.Semantic.Target)):])
                 write('layout(location={0}) out {1} __{2}_{3};\n'.format(slot, TYPE(element.type.str), dest_qualifier, element.name))
             elif is_builtin:
-                write('{0} {1} __{2}_{3};\n'.format(dest_qualifier, TYPE(element.type.str), dest_qualifier, SEMANTIC(element.semantic)))
+                write('{0} {1} {2};\n'.format(dest_qualifier, TYPE(element.type.str), SEMANTIC(element.semantic, cur_stage)))
             else:
                 write('layout (location={0}) {1} {2} __{3}_{4};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type.str), dest_qualifier, element.name))
         write('#endif\n\n')
 
-def entry_point_beg(func : pysl.Function, sin : pysl.StageInput, sout : pysl.StageInput):
-    if func.stage == pysl.Keywords.VertexShaderDecorator:
+
+def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageInput):
+    if func.stage == pysl.Language.Decorator.VertexShader:
         write('#if defined(PYSL_VERTEX_SHADER)\n')
-    elif func.stage == pysl.Keywords.PixelShaderDecorator:
+    elif func.stage == pysl.Language.Decorator.PixelShader:
         write('#if defined(PYSL_PIXEL_SHADER)\n')
     write('void {0}()\n{{\n'.format(func.name))
 
-def entry_point_end(func : pysl.Function):
+
+def entry_point_end(func: pysl.Function):
     write('};\n')
     write('#endif\n\n')
 
-def constant_buffer(cbuffer : pysl.ConstantBuffer):
+
+def constant_buffer(cbuffer: pysl.ConstantBuffer):
     write('layout(std140) uniform {0}\n{{\n'.format(cbuffer.name))
     for constant in cbuffer.constants:
         write('\tlayout(offset = {0}) {1} {2};\n'.format(OFFSET_TO_CONSTANT(constant.offset), TYPE(constant.type.str), constant.name))
@@ -116,19 +138,25 @@ def constant_buffer(cbuffer : pysl.ConstantBuffer):
         write('\tlayout(offset = {0}) float __pysl_padding;\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
     write('};\n\n')
 
-def sampler(sampler : pysl.Sampler):
+
+def sampler(sampler: pysl.Sampler):
     sampler_type = 'sampler' + sampler.type
     write('uniform {0} {1};\n'.format(sampler_type, sampler.name))
 
+
 # Block-level
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
+
 def arg_sep():
     write(', ')
+
 
 def arg_end():
     write(')')
 
-def _shadow_uv(sampler_type : str, uv_arg, cmp_arg):
+
+def _shadow_uv(sampler_type: str, uv_arg, cmp_arg):
     if sampler_type == '1DShadow':
         # Special case, second parameter is ignored as by specification
         write('vec3(')
@@ -148,8 +176,9 @@ def _shadow_uv(sampler_type : str, uv_arg, cmp_arg):
     cmp_arg()
     arg_end()
 
-def _sampler_sample(sampler : pysl.Sampler, args):
-    """ 
+
+def _sampler_sample(sampler: pysl.Sampler, args):
+    """
     texture(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/texture.xhtml
     textureOffset(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/textureOffset.xhtml
     """
@@ -165,7 +194,7 @@ def _sampler_sample(sampler : pysl.Sampler, args):
         write('textureOffset({0}, '.format(sampler.name))
         if is_shadow:
             _shadow_uv(sampler.type, uv, bias_cmp)
-            offset() # no bias
+            offset()  # no bias
         else:
             uv()
             arg_sep()
@@ -175,7 +204,7 @@ def _sampler_sample(sampler : pysl.Sampler, args):
                 bias_cmp()
         arg_end()
     else:
-        write('texture({0}, '.format(sampler.name))    
+        write('texture({0}, '.format(sampler.name))
         if is_shadow:
             _shadow_uv(sampler.type, uv, bias_cmp)
         else:
@@ -185,7 +214,8 @@ def _sampler_sample(sampler : pysl.Sampler, args):
                 bias_cmp()
         arg_end()
 
-def _sampler_load(sampler : pysl.Sampler, args):
+
+def _sampler_load(sampler: pysl.Sampler, args):
     """
     texelFetch(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/texelFetch.xhtml
     texelFetchOffset(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/texelFetchOffset.xhtml
@@ -218,7 +248,8 @@ def _sampler_load(sampler : pysl.Sampler, args):
             offset_sample()
         arg_end()
 
-def _sampler_sample_grad(sampler : pysl.Sampler, args):
+
+def _sampler_sample_grad(sampler: pysl.Sampler, args):
     """
     textureGrad(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/textureGrad.xhtml
     """
@@ -234,7 +265,8 @@ def _sampler_sample_grad(sampler : pysl.Sampler, args):
     ddy()
     arg_end()
 
-def _sampler_sample_level(sampler : pysl.Sampler, args):
+
+def _sampler_sample_level(sampler: pysl.Sampler, args):
     """
     textureLod(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/textureLod.xhtml
     """
@@ -247,7 +279,8 @@ def _sampler_sample_level(sampler : pysl.Sampler, args):
     miplevel()
     arg_end()
 
-def _sampler_gather(sampler : pysl.Sampler, args):
+
+def _sampler_gather(sampler: pysl.Sampler, args):
     """
     textureGather(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/textureGather.xhtml
     textureGatherOffset(): https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/textureGatherOffset.xhtml
@@ -282,18 +315,20 @@ def _sampler_gather(sampler : pysl.Sampler, args):
         channel_cmp()
         arg_end()
 
-def method_call(caller : pysl.Object, method : str, args):
+
+def method_call(caller: pysl.Object, method: str, args):
     if isinstance(caller, pysl.Sampler):
-        if method == pysl.Keywords.SamplerSampleMethod:
+        if method == pysl.Language.Sampler.Method.Sample:
             _sampler_sample(caller, args)
-        elif method == pysl.Keywords.SamplerLoadMethod:
+        elif method == pysl.Language.Sampler.Method.Load:
             _sampler_load(caller, args)
-        elif method == pysl.Keywords.SamplerSampleGradMethod:
+        elif method == pysl.Language.Sampler.Method.SampleGrad:
             _sampler_sample_grad(caller, args)
-        elif method == pysl.Keywords.SamplerSampleLevelMethod:
+        elif method == pysl.Language.Sampler.Method.SampleLevel:
             _sampler_sample_level(caller, args)
-        elif method == pysl.Keywords.SamplerGatherMethod:
+        elif method == pysl.Language.Sampler.Method.Gather:
             _sampler_gather(caller, args)
+
 
 def _args(args):
     for i in range(len(args) - 1):
@@ -302,18 +337,21 @@ def _args(args):
     if args:
         args[-1]()
 
-def constructor(type : str, args):
+
+def constructor(type: str, args):
     write('{0}('.format(TYPE(type)))
     _args(args)
     write(')')
 
-def intrinsic(type : str, args):
+
+def intrinsic(type: str, args):
     write('{0}('.format(type))
     _args(args)
     write(')')
 
-def special_attribute(attribute : str):
-    if attribute == pysl.Keywords.InputValue:
+
+def special_attribute(attribute: str):
+    if attribute == pysl.Language.SpecialAttribute.Input:
         write('__in_')
-    elif attribute == pysl.Keywords.OutputValue:
+    elif attribute == pysl.Language.SpecialAttribute.Output:
         write('__out_')
