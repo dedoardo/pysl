@@ -739,8 +739,15 @@ def parse_sampler(name : str, type : str, slot : int, value : ast.AST) -> pysl.S
 #-------------------------------------------------------------------------------
 # Creates a new evalution closure for delayed evaluation
 # <3 http://stackoverflow.com/questions/2295290/what-do-lambda-function-closures-capture-in-python
+class EvalClosure:
+    def __init__(self, node):
+        self.node = node
+
+    def __call__(self):
+        PYSL_eval(self.node)
+
 def PYSL_eval_closure(node):
-    return lambda : PYSL_eval(node) 
+    return EvalClosure(node)
 
 def PYSL_eval(node : ast.AST):
     """Core routine, doesn't return anything but directly writes to output"""

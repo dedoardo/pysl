@@ -120,39 +120,33 @@ def sampler(sampler : pysl.Sampler):
     sampler_type = 'sampler' + sampler.type
     write('uniform {0} {1};\n'.format(sampler_type, sampler.name))
 
+# Block-level
+#-------------------------------------------------------------------------------
 def arg_sep():
     write(', ')
 
 def arg_end():
     write(')')
 
-# Block-level
-#-------------------------------------------------------------------------------
-def _shadow_uv(sampler_type : str, uv_arg, cmp_arg) -> str:
+def _shadow_uv(sampler_type : str, uv_arg, cmp_arg):
     if sampler_type == '1DShadow':
+        # Special case, second parameter is ignored as by specification
         write('vec3(')
         uv_arg()
         write(', 0.f, ')
         cmp_arg()
         arg_end()
+        return
     elif sampler_type == '2DShadow':
         write('vec3(')
-        uv_arg()
-        arg_sep()
-        cmp_arg()
-        arg_end()
     elif sampler_type == '1DArrayShadow':
         write('vec3(')
-        uv_arg()
-        arg_sep()
-        cmp_arg()
-        arg_end()
     elif sampler_type == '2DArrayShadow':
         write('vec4(')
-        uv_arg()
-        arg_sep()
-        cmp_arg()
-        arg_end()
+    uv_arg()
+    arg_sep()
+    cmp_arg()
+    arg_end()
 
 def _sampler_sample(sampler : pysl.Sampler, args):
     """ 
@@ -161,10 +155,11 @@ def _sampler_sample(sampler : pysl.Sampler, args):
     """
 
     is_shadow = 'Shadow' in sampler.type
+    is_bias = len(args) >= 2
     is_offset = len(args) >= 3
 
     uv = args[0]
-    bias_cmp = args[1]
+    bias_cmp = args[1] if is_bias else None
     offset = args[2] if is_offset else None
     if is_offset:
         write('textureOffset({0}, '.format(sampler.name))
@@ -175,8 +170,9 @@ def _sampler_sample(sampler : pysl.Sampler, args):
             uv()
             arg_sep()
             offset()
-            arg_sep()
-            bias_cmp()
+            if is_bias:
+                arg_sep()
+                bias_cmp()
         arg_end()
     else:
         write('texture({0}, '.format(sampler.name))    
@@ -184,8 +180,9 @@ def _sampler_sample(sampler : pysl.Sampler, args):
             _shadow_uv(sampler.type, uv, bias_cmp)
         else:
             uv()
-            arg_sep()
-            bias_cmp()
+            if is_bias:
+                arg_sep()
+                bias_cmp()
         arg_end()
 
 def _sampler_load(sampler : pysl.Sampler, args):
