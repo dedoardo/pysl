@@ -133,11 +133,11 @@ def function_beg(func: pysl.Function):
         for name, obj in g_symbols.items():
             if isinstance(obj, pysl.StageInput):
                 for stage in obj.stages:
-                    if func.stage + pysl.Language.Decorator.In == stage:
+                    if func.stage + pysl.Language.Decorator.IN == stage:
                         if func_in:
                             error(func, "Multiple possible input values found for entry point: {0}".format(func.name))
                         func_in = obj
-                    if func.stage + pysl.Language.Decorator.Out == stage:
+                    if func.stage + pysl.Language.Decorator.OUT == stage:
                         if func_out:
                             error(func, "Multiple possible output values found for entry point: {0}".format(func.name))
                         func_out = obj
@@ -178,7 +178,7 @@ def declaration(assignment: pysl.Assignment):
 
     # Type is either a scalar basic type
     # or a StageInput. No other type is allowed at the block level
-    if (assignment.type not in pysl.Language.native_types and(assignment.type not in g_symbols or(
+    if (not pysl.Language.NativeType.is_in(assignment.type) and(assignment.type not in g_symbols or(
        not isinstance(g_symbols[assignment.type], pysl.StageInput) and
        not isinstance(g_symbols[assignment.type], pysl.Struct)
        ))):
@@ -259,8 +259,36 @@ def function_call(loc: pysl.Locationable, function: str, args):
     text(')')
 
 
-def special_attribute(attribute: str):
-    if g_hlsl:
-        hlsl5.special_attribute(attribute)
-    if g_glsl:
-        glsl45.special_attribute(attribute)
+# Using the function as locationable is not very good
+def special_attribute(loc: pysl.Locationable, func: pysl.Function, attribute: str, value: str):
+    if func.stage:
+        src_stage = func.stage
+        # Looking up associated stageinput
+        if attribute == pysl.Language.SpecialAttribute.INPUT:
+            src_stage += pysl.Language.Decorator.IN
+        elif attribute == pysl.Language.SpecialAttribute.OUTPUT:
+            src_stage += pysl.Language.Decorator.OUT
+
+        si = None
+        for name, symbol in g_symbols.items():
+            if isinstance(symbol, pysl.StageInput) and src_stage in symbol.stages:
+                si = symbol
+
+        if si is None:
+            error(loc, "Failed to find StageInput that matches attribute: {0} inside: {1}".format(attribute, func.name))
+            return
+
+        if si.get_element(value) is None:
+            error(loc, "Undeclared attribute: {0}.{1} inside: {2}".format(attribute, value, func.name))
+            return
+
+        if g_hlsl:
+            hlsl5.special_attribute(src_stage, si, attribute, value)
+        if g_glsl:
+            glsl45.special_attribute(src_stage, si, attribute, value)
+    else:
+        for arg in func.args:
+            if arg.name == attribute:
+                text('{0}.'.format(attribute))
+                return
+            error(loc, "Special attribute: {0} has valid meaning only inside an entry point, see documentation for more details".format(attribute))

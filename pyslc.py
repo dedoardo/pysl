@@ -135,6 +135,7 @@ def parse_assignment(node: ast.AST) -> pysl.Assignment:
         return
 
     ret = pysl.Assignment()
+    ret.set_location(node)
     ret.qualifiers = []
     if isinstance(node, ast.AnnAssign):
         # Declaration
@@ -143,8 +144,8 @@ def parse_assignment(node: ast.AST) -> pysl.Assignment:
             ret.type = node.annotation.id
         elif (isinstance(node.annotation, ast.Attribute) and
               isinstance(node.annotation.value, ast.Name)):
-            if node.annotation.value.id == pysl.Language.Qualifier.Const:
-                ret.qualifiers.append(pysl.Language.Qualifier.Const)
+            if node.annotation.value.id == pysl.Language.Qualifier.CONST:
+                ret.qualifiers.append(pysl.Language.Qualifier.CONST)
             else:
                 error(loc(node.annotation), "Unsupported qualifier, only const is supported in a block assignment/declaration")
             ret.type = node.annotation.attr
@@ -270,8 +271,10 @@ def cmpop_str(op: ast.AST) -> str:
 
 def parse_struct(node: ast.ClassDef) -> pysl.Struct:
     struct = pysl.Struct()
+    struct.set_location(node)
     struct.name = node.name
     struct.elements = []
+    struct.set_location(node)
 
     for decl_node in node.body:
         if isinstance(decl_node, ast.AnnAssign):
@@ -284,38 +287,41 @@ def parse_struct(node: ast.ClassDef) -> pysl.Struct:
 
 
 def parse_stage_input(node: ast.ClassDef, stages: str) -> pysl.StageInput:
-    struct = pysl.StageInput()
-    struct.name = node.name
-    struct.elements = []
-    struct.stages = stages
+    si = pysl.StageInput()
+    si.set_location(node)
+    si.name = node.name
+    si.elements = []
+    si.stages = stages
 
     conditions = []
     for decl_node in node.body:
         if isinstance(decl_node, ast.AnnAssign):
             assignment = parse_assignment(decl_node)
             element = pysl.InputElement()
+            element.set_location(decl_node)
             element.name = assignment.name
             element.type = str_to_pysl_type(loc(decl_node), assignment.type)
             element.semantic = assignment.value
             element.conditions = list(conditions)
             conditions[:] = []  # Copy
-            struct.elements.append(element)
+            si.elements.append(element)
 
         elif (isinstance(decl_node, ast.Expr) and
               isinstance(decl_node.value, ast.Call)):
             if decl_node.value.func.id is '_':
                 conditions.append(parse_preprocessor(decl_node.value))
             else:
-                error(loc(decl_node), "Unsupported function call: {0} inside StageInput: {1}".format(decl_node.value.func.id, struct.name))
+                error(loc(decl_node), "Unsupported function call: {0} inside StageInput: {1}".format(decl_node.value.func.id, si.name))
         else:
-            error(loc(decl_node), "Unrecognized node inside StageInput: {0}".format(struct.name))
+            error(loc(decl_node), "Unrecognized node inside StageInput: {0}".format(si.name))
 
-    struct.post_conditions = list(conditions)
-    return struct
+    si.post_conditions = list(conditions)
+    return si
 
 
 def parse_constant_buffer(node: ast.ClassDef) -> pysl.ConstantBuffer:
     cbuffer = pysl.ConstantBuffer()
+    cbuffer.set_location(node)
     cbuffer.name = node.name
     cbuffer.constants = []
 
@@ -323,6 +329,7 @@ def parse_constant_buffer(node: ast.ClassDef) -> pysl.ConstantBuffer:
         if isinstance(decl_node, ast.AnnAssign):
             assignment = parse_assignment(decl_node)
             constant = pysl.Constant()
+            constant.set_location(decl_node)
             constant.name = assignment.name
             if assignment.value:
                 try:
@@ -345,8 +352,9 @@ def parse_constant_buffer(node: ast.ClassDef) -> pysl.ConstantBuffer:
     return cbuffer
 
 
-def parse_sampler(name: str, type: str, slot: int, value: ast.AST) -> pysl.Sampler:
+def parse_sampler(loc: pysl.Locationable, name: str, type: str, slot: int, value: ast.AST) -> pysl.Sampler:
     sampler = pysl.Sampler()
+    sampler.set_location(value)
     sampler.name = name
     sampler.type = type
     sampler.slot = slot
@@ -354,7 +362,7 @@ def parse_sampler(name: str, type: str, slot: int, value: ast.AST) -> pysl.Sampl
     if value:
         if (not isinstance(value, ast.Call) or
            not isinstance(value.func, ast.Name) or
-           not value.func.id == pysl.Language.Export.Keyword):
+           not value.func.id == pysl.Language.Export.KEYWORD):
             error(loc(value), "Expected export() expression")
         else:
             for kw in value.keywords:
@@ -382,14 +390,15 @@ class EvalClosure:
     # Creates a new evalution closure for delayed evaluation
     http://stackoverflow.com/questions/2295290/what-do-lambda-function-closures-capture-in-python
     """
-    def __init__(self, node):
+    def __init__(self, func, node):
+        self.func = func
         self.node = node
 
     def __call__(self):
-        PYSL_eval(self.node)
+        PYSL_eval(self.func, self.node)
 
 
-def PYSL_eval(node: ast.AST):
+def PYSL_eval(func: pysl.Function, node: ast.AST):
     """Core routine, doesn't return anything but directly writes to output"""
     if not node:
         return
@@ -398,15 +407,15 @@ def PYSL_eval(node: ast.AST):
         # - Method call
         if isinstance(node.func, ast.Attribute):
             emitter.method_call(loc(node.func.value), node.func.value.id, node.func.attr,
-                                [EvalClosure(n) for n in node.args])
+                                [EvalClosure(func, n) for n in node.args])
         # - Intrinsics, that is any kind of built in function
-        elif pysl.Language.is_intrinsic(node.func.id):
+        elif pysl.Language.Intrinsic.is_in(node.func.id):
             emitter.intrinsic(node.func.id,
-                              [EvalClosure(n) for n in node.args])
+                              [EvalClosure(func, n) for n in node.args])
         # - Constructor, just a new type being declared
-        elif pysl.Language.is_native_type(node.func.id):
+        elif pysl.Language.NativeType.is_in(node.func.id):
             emitter.constructor(node.func.id,
-                                [EvalClosure(n) for n in node.args])
+                                [EvalClosure(func, n) for n in node.args])
         # - '_' is the special code for the preprocessor, writes the string
         # contained in the braces as it is
         elif node.func.id is '_':
@@ -414,32 +423,31 @@ def PYSL_eval(node: ast.AST):
         # - As we didnt' recognize the name, it is probably a user's routine
         else:
             emitter.function_call(loc(node.func), node.func.id,
-                                  [EvalClosure(n) for n in node.args])
+                                  [EvalClosure(func, n) for n in node.args])
 
     elif isinstance(node, ast.Attribute):
         # node.attr is the attribute name (string)
         if isinstance(node.value, ast.Name):
-            if (node.value.id == pysl.Language.SpecialAttribute.Input or
-               node.value.id == pysl.Language.SpecialAttribute.Output):
-                emitter.special_attribute(node.value.id)
-        else:
-            PYSL_eval(node.value)
-            emitter.text('.')
+            if (node.value.id == pysl.Language.SpecialAttribute.INPUT or
+               node.value.id == pysl.Language.SpecialAttribute.OUTPUT):
+                emitter.special_attribute(loc(node), func, node.value.id, node.attr)
 
-        emitter.text('{0}'.format(node.attr))
+        else:
+            PYSL_eval(func, node.value)
+            emitter.text('.{0}'.format(node.attr))
 
     elif isinstance(node, ast.IfExp):
         # Ternary if
-        PYSL_eval(node.test)
+        PYSL_eval(func, node.test)
         emitter.text(' ? ')
-        PYSL_eval(node.body)
+        PYSL_eval(func, node.body)
         emitter.text(' : ')
-        PYSL_eval(node.orelse)
+        PYSL_eval(func, node.orelse)
 
     elif isinstance(node, ast.UnaryOp):
         emitter.text(unop_str(node.op))
         emitter.text('(')
-        PYSL_eval(node.operand)
+        PYSL_eval(func, node.operand)
         emitter.text(')')
 
     elif isinstance(node, ast.BinOp):
@@ -448,60 +456,60 @@ def PYSL_eval(node: ast.AST):
         if op_str == '@':
             if not isinstance(node.left, ast.Name):
                 error(loc(node.left), "Expected type to the left of the cast operator")
-            elif not pysl.Language.is_native_type(node.left.id):
+            elif not pysl.Language.NativeType.is_in(node.left.id):
                 error(loc(node.left), "Invalid destination type: {0}".format(node.left.id))
             else:
                 emitter.text('(')
-                PYSL_eval(node.left)
+                PYSL_eval(func, node.left)
                 emitter.text(')')
-                PYSL_eval(node.right)
+                PYSL_eval(func, node.right)
         else:
-            PYSL_eval(node.left)
+            PYSL_eval(func, node.left)
             emitter.text(' {0} '.format(op_str))
-            PYSL_eval(node.right)
+            PYSL_eval(func, node.right)
 
     elif isinstance(node, ast.BoolOp):
         if len(node.values) > 2:
             error(loc(node), "Unsupported multiple consecutive boolean expressions")
             return
         emitter.text('(')
-        PYSL_eval(node.values[0])
+        PYSL_eval(func, node.values[0])
         emitter.text(')')
         if isinstance(node.op, ast.And):
             emitter.text(' && ')
         if isinstance(node.op, ast.Or):
             emitter.text(' || ')
         emitter.text('(')
-        PYSL_eval(node.values[1])
+        PYSL_eval(func, node.values[1])
         emitter.text(')')
 
     elif isinstance(node, ast.Set):
         emitter.text('{ ')
         for i in range(len(node.elts)):
-            PYSL_eval(node.elts[i])
+            PYSL_eval(func, node.elts[i])
             if i != len(node.elts) - 1:
                 emitter.text(', ')
         emitter.text(' }')
 
     elif isinstance(node, ast.Subscript):
-        PYSL_eval(node.value)
+        PYSL_eval(func, node.value)
         emitter.text('[')
-        PYSL_eval(node.slice)
+        PYSL_eval(func, node.slice)
         emitter.text(']')
 
     elif isinstance(node, ast.Compare):
         if len(node.ops) > 1 or len(node.comparators) > 1:
             error(loc(node), "Unsupported multiple comparison operators")
             return
-        PYSL_eval(node.left)
+        PYSL_eval(func, node.left)
         emitter.text(cmpop_str(node.ops[0]))
-        PYSL_eval(node.comparators[0])
+        PYSL_eval(func, node.comparators[0])
 
     elif isinstance(node, ast.Num):
         emitter.text(str(node.n))
 
     elif isinstance(node, ast.Index):
-        PYSL_eval(node.value)
+        PYSL_eval(func, node.value)
 
     elif isinstance(node, ast.Str):
         emitter.text(node.s)
@@ -510,7 +518,7 @@ def PYSL_eval(node: ast.AST):
         emitter.text(node.id)
 
     elif isinstance(node, ast.Expr):
-        PYSL_eval(node.value)
+        PYSL_eval(func, node.value)
 
     else:
         print(node)
@@ -521,16 +529,16 @@ def INDENT(indent: int):
     emitter.text('\t' * indent)
 
 
-def PYSL_block(nodes: [ast.AST], indent: int):
+def PYSL_block(func: pysl.Function, nodes: [ast.AST], indent: int):
     """Evaluates line by line all the instructions"""
     for node in nodes:
         if isinstance(node, ast.Pass):
             pass
         elif isinstance(node, ast.Assign):
             INDENT(indent)
-            PYSL_eval(node.targets[0])
+            PYSL_eval(func, node.targets[0])
             emitter.text(' = ')
-            PYSL_eval(node.value)
+            PYSL_eval(func, node.value)
             emitter.text(';\n')
 
         elif isinstance(node, ast.AnnAssign):
@@ -538,7 +546,7 @@ def PYSL_block(nodes: [ast.AST], indent: int):
             emitter.declaration(parse_assignment(node))
             if node.value:
                 emitter.text(' = ')
-                PYSL_eval(node.value)
+                PYSL_eval(func, node.value)
             emitter.text(';\n')
 
         elif isinstance(node, ast.Expr):
@@ -550,20 +558,20 @@ def PYSL_block(nodes: [ast.AST], indent: int):
 
         elif isinstance(node, ast.AugAssign):
             INDENT(indent)
-            PYSL_eval(node.target)
+            PYSL_eval(func, node.target)
             emitter.text(' {0}= '.format(binop_str(node.op)))
-            PYSL_eval(node.value)
+            PYSL_eval(func, node.value)
             emitter.text(';\n')
 
         elif isinstance(node, ast.Return):
             INDENT(indent)
             emitter.text('return ')
-            PYSL_eval(node.value)
+            PYSL_eval(func, node.value)
             emitter.text(';\n')
         elif isinstance(node, ast.If):
             INDENT(indent)
             emitter.text('if (')
-            PYSL_eval(node.test)
+            PYSL_eval(func, node.test)
             emitter.text(')\n')
             INDENT(indent)
             emitter.text('{\n')
@@ -643,7 +651,7 @@ def PYSL_block(nodes: [ast.AST], indent: int):
         elif isinstance(node, ast.While):
             INDENT(indent)
             emitter.text('while(')
-            PYSL_eval(node.test)
+            PYSL_eval(func, node.test)
             emitter.text(')\n')
             INDENT(indent)
             emitter.text('{\n')
@@ -665,10 +673,13 @@ def PYSL_block(nodes: [ast.AST], indent: int):
 
 def PYSL_arg(func: ast.FunctionDef, arg: ast.arg) -> pysl.Declaration:
     if isinstance(arg.annotation, ast.Name):
-        return pysl.Declaration(arg.annotation.id, arg.arg, [])
+        decl = pysl.Declaration(arg.annotation.id, arg.arg, [])
+        decl.set_location(arg)
+        return decl
     elif isinstance(arg.annotation, ast.Attribute) and isinstance(arg.annotation.value, ast.Name):
-        if arg.annotation.value.id == pysl.Language.Qualifier.Out:
-            return pysl.Declaration(arg.annotation.attr, arg.arg, [pysl.Language.Qualifier.Out])
+        if arg.annotation.value.id == pysl.Language.Qualifier.OUT:
+            decl = pysl.Declaration(arg.annotation.attr, arg.arg, [pysl.Language.Qualifier.OUT])
+            decl.set_location(arg)
     else:
         error(loc(arg), "Expected type for parameter: {0} of function: {1}".format(
               arg.arg, func.name))
@@ -677,6 +688,7 @@ def PYSL_arg(func: ast.FunctionDef, arg: ast.arg) -> pysl.Declaration:
 
 def PYSL_function_signature(func: ast.FunctionDef):
     ret = pysl.Function()
+    ret.set_location(func)
     ret.name = func.name
     ret.args = []
 
@@ -687,7 +699,7 @@ def PYSL_function_signature(func: ast.FunctionDef):
     if func.decorator_list:
         if isinstance(func.decorator_list[0], ast.Name):
             decorator = func.decorator_list[0].id
-            if decorator in pysl.Language.Decorator.Stages:
+            if decorator in pysl.Language.Decorator.STAGES:
                 ret.stage = decorator
             else:
                 error(loc(func.decorator_list[0]), "Unknown decorator: {0}".format(func.decorator_list[0].id))
@@ -706,7 +718,7 @@ def PYSL_function_signature(func: ast.FunctionDef):
         ret.args.append(PYSL_arg(func, func.args.args[-1]))
 
     emitter.function_beg(ret)
-    PYSL_block(func.body, 1)
+    PYSL_block(ret, func.body, 1)
     emitter.function_end(ret)
 
 
@@ -722,8 +734,8 @@ def PYSL_tl_decl(node: ast.AnnAssign):
     res_type = node.annotation.args[0].id
     res_slot = node.annotation.args[1].n
 
-    if res_type in pysl.Language.Sampler.Types:
-        emitter.sampler(parse_sampler(res_name, res_type[7:], res_slot, node.value))
+    if res_type in pysl.Language.Sampler.TYPES:
+        emitter.sampler(parse_sampler(node, res_name, res_type[7:], res_slot, node.value))
     else:
         error((node), "Unrecognized top-level resource declaration {0} : {1}".format(res_name, res_type))
 
@@ -750,15 +762,15 @@ def PYSL(path: str):
                 emitter.decl_struct(parse_struct(node))
             else:
                 decorator = parse_decorator(node.decorator_list[0])
-                if decorator.name == pysl.Language.Decorator.StageInput:
+                if decorator.name == pysl.Language.Decorator.STAGE_INPUT:
                     stages = []
                     for arg in decorator.args:
-                        if arg in pysl.Language.Decorator.StageInputs:
+                        if arg in pysl.Language.Decorator.STAGE_INPUTS:
                             stages.append(arg)
                         else:
                             error(loc(decorator), "Unrecognized stageinput decorator: {0}".format(arg))
                     emitter.decl_stage_input(parse_stage_input(node, stages))
-                elif decorator.name == pysl.Language.Decorator.ConstantBuffer:
+                elif decorator.name == pysl.Language.Decorator.CONSTANT_BUFFER:
                     emitter.constant_buffer(parse_constant_buffer(node))
                 else:
                     error(loc(node), "Unsupported decorator: {0}".format(decorator.name))

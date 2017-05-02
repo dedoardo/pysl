@@ -32,7 +32,7 @@ def TYPE(type: str):
         'mat3x2', 'mat3x3', 'mat3x4',
         'mat4x2', 'mat4x3', 'mat4x4'
     ]
-    return type_map[pysl.Language.native_types.index(type)]
+    return type_map[pysl.Language.NativeType._ALL.index(type)]
 
 
 def OFFSET_TO_CONSTANT(offset: int):
@@ -61,7 +61,7 @@ def struct(struct: pysl.Struct):
 
 
 def SEMANTIC(semantic: str, stage: str) -> str:
-    if stage == pysl.Language.Decorator.PixelShader and semantic == pysl.Language.Semantic.Position:
+    if stage == pysl.Language.Decorator.PIXEL_SHADER and semantic == pysl.Language.Semantic.POSITION:
         return 'gl_FragCoord'
 
     semantic_map = [
@@ -77,15 +77,15 @@ def SEMANTIC(semantic: str, stage: str) -> str:
         'gl_Target',
         'gl_VertexID'
     ]
-    return semantic_map[pysl.Language.Semantic.All.index(semantic)]
+    return semantic_map[pysl.Language.Semantic._ALL.index(semantic)]
 
 
 def LOCATION(element: pysl.InputElement, si: pysl.StageInput, prev_sis: [pysl.StageInput], stage: str) -> int:
-    if stage[2:] in [pysl.Language.Decorator.Out, pysl.Language.Decorator.In]:
+    if stage[2:] in [pysl.Language.Decorator.OUT, pysl.Language.Decorator.IN]:
         return si.elements.index(element)
     else:
         # Linkings vs-ps
-        prev_stage = pysl.Language.Decorator.VertexShaderOut
+        prev_stage = pysl.Language.Decorator.VERTEX_SHADER_OUT
         for prev_si in prev_sis:
             if prev_stage in prev_si.stages:
                 # Looking for the element with the matching semantic
@@ -99,16 +99,16 @@ def LOCATION(element: pysl.InputElement, si: pysl.StageInput, prev_sis: [pysl.St
 def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
     for stage in si.stages:
         cur_stage = stage[:2]
-        if cur_stage == pysl.Language.Decorator.VertexShader:
+        if cur_stage == pysl.Language.Decorator.VERTEX_SHADER:
             write('#if defined(PYSL_VERTEX_SHADER)\n')
-        elif cur_stage == pysl.Language.Decorator.PixelShader:
+        elif cur_stage == pysl.Language.Decorator.PIXEL_SHADER:
             write('#if defined(PYSL_PIXEL_SHADER)\n')
 
         dest_qualifier = stage[2:]
         for element in si.elements:
             is_builtin = True if element.semantic[:3] == 'SV_' else False
-            if element.semantic.startswith(pysl.Language.Semantic.Target):  # Only valid as output
-                slot = int(element.semantic[(len(pysl.Language.Semantic.Target)):])
+            if element.semantic.startswith(pysl.Language.Semantic.TARGET):  # Only valid as output
+                slot = int(element.semantic[(len(pysl.Language.Semantic.TARGET)):])
                 write('layout(location={0}) out {1} __{2}_{3};\n'.format(slot, TYPE(element.type.str), dest_qualifier, element.name))
             elif is_builtin:
                 write('{0} {1} {2};\n'.format(dest_qualifier, TYPE(element.type.str), SEMANTIC(element.semantic, cur_stage)))
@@ -118,9 +118,9 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
 
 
 def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageInput):
-    if func.stage == pysl.Language.Decorator.VertexShader:
+    if func.stage == pysl.Language.Decorator.VERTEX_SHADER:
         write('#if defined(PYSL_VERTEX_SHADER)\n')
-    elif func.stage == pysl.Language.Decorator.PixelShader:
+    elif func.stage == pysl.Language.Decorator.PIXEL_SHADER:
         write('#if defined(PYSL_PIXEL_SHADER)\n')
     write('void {0}()\n{{\n'.format(func.name))
 
@@ -318,15 +318,15 @@ def _sampler_gather(sampler: pysl.Sampler, args):
 
 def method_call(caller: pysl.Object, method: str, args):
     if isinstance(caller, pysl.Sampler):
-        if method == pysl.Language.Sampler.Method.Sample:
+        if method == pysl.Language.Sampler.Method.SAMPLE:
             _sampler_sample(caller, args)
-        elif method == pysl.Language.Sampler.Method.Load:
+        elif method == pysl.Language.Sampler.Method.LOAD:
             _sampler_load(caller, args)
-        elif method == pysl.Language.Sampler.Method.SampleGrad:
+        elif method == pysl.Language.Sampler.Method.SAMPLE_GRAD:
             _sampler_sample_grad(caller, args)
-        elif method == pysl.Language.Sampler.Method.SampleLevel:
+        elif method == pysl.Language.Sampler.Method.SAMPLE_LEVEL:
             _sampler_sample_level(caller, args)
-        elif method == pysl.Language.Sampler.Method.Gather:
+        elif method == pysl.Language.Sampler.Method.GATHER:
             _sampler_gather(caller, args)
 
 
@@ -345,13 +345,45 @@ def constructor(type: str, args):
 
 
 def intrinsic(type: str, args):
-    write('{0}('.format(type))
-    _args(args)
-    write(')')
+    if type == pysl.Language.Intrinsic.MUL:
+        args[1]()
+        write('*')
+        args[0]()
+    elif type.startswith(pysl.Language.Intrinsic.COL):
+        args[0]()
+        write('[')
+        args[1]()
+        write(']')
+    elif type.startswith(pysl.Language.Intrinsic.ROW):
+        mat = args[0]
+        row = args[1]
+
+        comps = int(type[-1])
+        write('vec{0}('.format(comps))
+        for comp in range(comps):
+            mat()
+            write('[{0}]['.format(comp))
+            row()
+            write(']{0}'.format(', ' if comp < comps - 1 else ''))
+        write(')')
+    else:
+        name = type
+        if type == pysl.Language.Intrinsic.LERP:
+            name = 'mix'
+
+        write('{0}('.format(name))
+        _args(args)
+        write(')')
 
 
-def special_attribute(attribute: str):
-    if attribute == pysl.Language.SpecialAttribute.Input:
-        write('__in_')
-    elif attribute == pysl.Language.SpecialAttribute.Output:
-        write('__out_')
+def special_attribute(stage: str, si: pysl.StageInput, attribute: str, value: str):
+    # Checking if the attribute is special
+    semantic = si.get_element(value).semantic
+    is_builtin = True if semantic[:3] == 'SV_' else False
+
+    if not semantic.startswith(pysl.Language.Semantic.TARGET) and is_builtin:
+        write(SEMANTIC(semantic, stage))
+    elif attribute == pysl.Language.SpecialAttribute.INPUT:
+        write('__in_{0}'.format(value))
+    elif attribute == pysl.Language.SpecialAttribute.OUTPUT:
+        write('__out_{0}'.format(value))

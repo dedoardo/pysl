@@ -76,13 +76,13 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
 
 def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageInput):
     write('{0} {1}('.format(sout.name, func.name))
-    write('{0} {1}'.format(sin.name, pysl.Language.SpecialAttribute.Input))
+    write('{0} {1}'.format(sin.name, pysl.Language.SpecialAttribute.INPUT))
     write(')\n{\n')
-    write('\t{0} {1};\n'.format(sout.name, pysl.Language.SpecialAttribute.Output))
+    write('\t{0} {1};\n'.format(sout.name, pysl.Language.SpecialAttribute.OUTPUT))
 
 
 def entry_point_end(func: pysl.Function):
-    write('\treturn {0};\n'.format(pysl.Language.SpecialAttribute.Output))
+    write('\treturn {0};\n'.format(pysl.Language.SpecialAttribute.OUTPUT))
     write('};\n\n')
 
 
@@ -119,7 +119,7 @@ def sampler(sampler: pysl.Sampler):
         'TextureCube',
         'TextureCubeArray',
     ]
-    texture_type = texture_type_map[pysl.Language.Sampler.Types.index('Sampler' + sampler.type)]
+    texture_type = texture_type_map[pysl.Language.Sampler.TYPES.index('Sampler' + sampler.type)]
     write('{0} {1} : register(t{2});\n'.format(texture_type, TEXTURE_NAME_FROM_SAMPLER(sampler.name), sampler.slot))
     write('SamplerState {0} : register(s{1});\n\n'.format(sampler.name, sampler.slot))
 
@@ -268,15 +268,15 @@ def _sampler_gather(sampler: pysl.Sampler, args):
 
 def method_call(caller: pysl.Object, method: str, args):
     if isinstance(caller, pysl.Sampler):
-        if method == pysl.Language.Sampler.Method.Sample:
+        if method == pysl.Language.Sampler.Method.SAMPLE:
             _sampler_sample(caller, args)
-        elif method == pysl.Language.Sampler.Method.Load:
+        elif method == pysl.Language.Sampler.Method.LOAD:
             _sampler_load(caller, args)
-        elif method == pysl.Language.Sampler.Method.SampleGrad:
+        elif method == pysl.Language.Sampler.Method.SAMPLE_GRAD:
             _sampler_sample_grad(caller, args)
-        elif method == pysl.Language.Sampler.Method.SampleLevel:
+        elif method == pysl.Language.Sampler.Method.SAMPLE_LEVEL:
             _sampler_sample_level(caller, args)
-        elif method == pysl.Language.Sampler.Method.Gather:
+        elif method == pysl.Language.Sampler.Method.GATHER:
             _sampler_gather(caller, args)
 
 
@@ -295,11 +295,28 @@ def constructor(type: str, args):
 
 
 def intrinsic(type: str, args):
-    write('{0}('.format(type))
-    _args(args)
-    write(')')
+    if type.startswith(pysl.Language.Intrinsic.COL):
+        mat = args[0]
+        row = args[1]
+
+        comps = int(type[-1])
+        write('float{0}('.format(comps))
+        for comp in range(comps):
+            mat()
+            write('[{0}]['.format(comp))
+            row()
+            write(']{0}'.format(', ' if comp < comps - 1 else ''))
+        write(')')
+    elif type.startswith(pysl.Language.Intrinsic.ROW):
+        args[0]()
+        write('[')
+        args[1]()
+        write(']')
+    else:
+        write('{0}('.format(type))
+        _args(args)
+        write(')')
 
 
-def special_attribute(attribute: str):
-    write(attribute)
-    write('.')
+def special_attribute(stage: str, si: pysl.StageInput, attribute: str, value: str):
+    write('{0}.{1}'.format(attribute, value))
