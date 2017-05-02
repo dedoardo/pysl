@@ -1,8 +1,8 @@
-import pysl
-import hlsl5
-import glsl45
-import exporter
-from error import error
+from . import pysl
+from . import hlsl5
+from . import glsl45
+from . import exporter
+from .error import error
 
 
 g_hlsl: bool = False

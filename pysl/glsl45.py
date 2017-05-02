@@ -1,5 +1,5 @@
-import pysl
 import os
+from . import pysl
 
 _OUT = None
 

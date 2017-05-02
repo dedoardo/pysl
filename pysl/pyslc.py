@@ -1,10 +1,10 @@
 import ast
 import sys
-import pysl
 import argparse
-import emitter
-import exporter
-from error import error, init, get_status
+from . import pysl
+from . import emitter
+from . import exporter
+from .error import error, init, get_status
 
 
 def loc(node: ast.AST) -> pysl.Locationable:
@@ -798,7 +798,7 @@ def PYSL(path: str):
             error(loc(node), "Unsupported top-level expression")
 
 
-if __name__ == '__main__':
+def main() -> int:
     if (len(sys.argv) < 2):
         print("Please specify file to transpile")
         sys.exit()
@@ -824,5 +824,9 @@ if __name__ == '__main__':
     exporter.finalize()
 
     if get_status() is False:
-        sys.exit(1)
-    sys.exit(0)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

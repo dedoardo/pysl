@@ -1,5 +1,5 @@
-import pysl
 import sys
+from . import pysl
 
 # Error reporting
 # ------------------------------------------------------------------------------

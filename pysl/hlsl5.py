@@ -1,7 +1,7 @@
-import pysl
 import math
 import os
 import ast
+from . import pysl
 
 g_out = None
 

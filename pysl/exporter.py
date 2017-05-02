@@ -1,5 +1,4 @@
-import pysl
-
+from . import pysl
 
 def init(json_path: str, cpp_path: str):
     return True
