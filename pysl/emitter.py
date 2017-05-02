@@ -146,6 +146,8 @@ def function_beg(func: pysl.Function):
             error(func, "Undeclared input or output for function stage: {0}:{1}".format(
                 func.name, func.stage))
             return
+
+        exporter.entry_point(func)
         if g_hlsl:
             hlsl5.entry_point_beg(func, func_in, func_out)
         if g_glsl:
@@ -228,18 +230,25 @@ def constructor(typename: str, args):
         g_hlsl = old
 
 
-def intrinsic(type: str, args):
+def intrinsic(loc: pysl.Locationable, type: str, args):
     """Intrinsic function, assuming that itype is in pysl.INTRINSICS"""
     global g_hlsl, g_glsl
 
-    if g_hlsl:
-        old, g_glsl = g_glsl, False
-        hlsl5.intrinsic(type, args)
-        g_glsl = old
-    if g_glsl:
-        old, g_hlsl = g_hlsl, False
-        glsl45.intrinsic(type, args)
-        g_hlsl = old
+    intrin = pysl.Language.Intrinsic.find(type)
+    if intrin:
+        if len(args) != pysl.Language.Intrinsic.find(type).num_args:
+            error(loc, "Invalid number of arguments for intrinsic: {0}(). expected {1}, but found {2}".format(
+                intrin.name, intrin.num_args, len(args)))
+            return
+
+        if g_hlsl:
+            old, g_glsl = g_glsl, False
+            hlsl5.intrinsic(type, args)
+            g_glsl = old
+        if g_glsl:
+            old, g_hlsl = g_hlsl, False
+            glsl45.intrinsic(type, args)
+            g_hlsl = old
 
 
 def function_call(loc: pysl.Locationable, function: str, args):

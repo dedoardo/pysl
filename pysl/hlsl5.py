@@ -1,5 +1,6 @@
 import math
 import os
+import sys
 import ast
 from . import pysl
 
@@ -15,7 +16,7 @@ def init(path: str) -> bool:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         g_out = open(path, 'w')
     except IOError as e:
-        print("Failed to open file: {0} with error: {1}".format(path, e))
+        sys.stderr.write("Failed to open file: {0} with error: {1}\n".format(path, e))
         return False
     return True
 

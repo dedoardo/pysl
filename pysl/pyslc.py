@@ -410,7 +410,7 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
                                 [EvalClosure(func, n) for n in node.args])
         # - Intrinsics, that is any kind of built in function
         elif pysl.Language.Intrinsic.is_in(node.func.id):
-            emitter.intrinsic(node.func.id,
+            emitter.intrinsic(loc(node.func), node.func.id,
                               [EvalClosure(func, n) for n in node.args])
         # - Constructor, just a new type being declared
         elif pysl.Language.NativeType.is_in(node.func.id):

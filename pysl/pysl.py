@@ -281,6 +281,13 @@ class Language:
                     return True
             return False
 
+        @staticmethod
+        def find(func: str) -> Intrinsic:
+            for intr in Language.Intrinsic._ALL:
+                if intr.name == func:
+                    return intr
+            return None
+
     class Qualifier:
         OUT = 'out'
         CONST = 'const'
