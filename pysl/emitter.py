@@ -24,6 +24,13 @@ def init(hlsl_path: str, glsl_path: str) -> bool:
 
     g_symbols = {}
     return True
+    
+
+def finalize():
+    if g_hlsl:
+        hlsl5.finalize()
+    if g_glsl:
+        glsl45.finalize()
 
 
 def text(string: str):
@@ -240,7 +247,7 @@ def intrinsic(loc: pysl.Locationable, type: str, args):
             error(loc, "Invalid number of arguments for intrinsic: {0}(). expected {1}, but found {2}".format(
                 intrin.name, intrin.num_args, len(args)))
             return
-
+        
         if g_hlsl:
             old, g_glsl = g_glsl, False
             hlsl5.intrinsic(type, args)

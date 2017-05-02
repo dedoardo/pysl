@@ -20,8 +20,14 @@ def get_status() -> bool:
 
 
 def error(loc: pysl.Locationable, msg: str):
-    sys.stderr.write('pyslc: {0}:{1}:{2} {3}\n'.format(g_file,
-                                                     loc.line, loc.col, msg))
+    if loc:
+        sys.stderr.write('error: {0}:{1}:{2}: {3}\n'.format(g_file, loc.line, loc.col, msg))
+    else:
+        sys.stderr.write('error: {0}\n'.format(msg))
 
     global g_compilation_status
     g_compilation_status = False
+
+
+def info(msg: str):
+    sys.stdout.write('info: {0}\n'.format(msg))

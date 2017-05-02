@@ -35,11 +35,6 @@ def init(json_path: str, cpp_path: str):
             sys.stderr.write("Failed to open file: {0} with error: {1}\n".format(json_path, e))
             return False
 
-        g_root = {}
-        g_root[pysl.Language.Export.OPTIONS] = []
-        g_root[pysl.Language.Export.CONSTANT_BUFFERS] = []
-        g_root[pysl.Language.Export.SAMPLERS] = []
-
     if cpp_path:
         os.makedirs(os.path.dirname(cpp_path), exist_ok=True)
         try:
@@ -50,11 +45,15 @@ def init(json_path: str, cpp_path: str):
 
         g_cpp.write(CPP_HEADER)
 
+    g_root = {}
+    g_root[pysl.Language.Export.OPTIONS] = []
+    g_root[pysl.Language.Export.CONSTANT_BUFFERS] = []
+    g_root[pysl.Language.Export.SAMPLERS] = []
     return True
 
 
 def finalize():
-    if g_root:
+    if g_json:
         g_json.write(json.dumps(g_root, indent=4, separators=(',', ': ')))
 
     if g_cpp:
@@ -62,8 +61,7 @@ def finalize():
 
 
 def options(options: [str]):
-    if g_root:
-        g_root[pysl.Language.Export.OPTIONS] += options
+    g_root[pysl.Language.Export.OPTIONS] += options
 
 
 def struct(struct: pysl.Struct):
@@ -75,12 +73,11 @@ def stage_input(si: pysl.StageInput):
 
 
 def constant_buffer(cbuffer: pysl.ConstantBuffer):
-    if g_root:
-        state = {}
-        state[pysl.Language.Export.NAME] = cbuffer.name
-        if cbuffer.enforced_size:
-            state[pysl.Language.Export.SIZE] = cbuffer.enforced_size
-        g_root[pysl.Language.Export.CONSTANT_BUFFERS].append(state)
+    state = {}
+    state[pysl.Language.Export.NAME] = cbuffer.name
+    if cbuffer.enforced_size:
+        state[pysl.Language.Export.SIZE] = cbuffer.enforced_size
+    g_root[pysl.Language.Export.CONSTANT_BUFFERS].append(state)
 
     if g_cpp:
         g_cpp.write('struct {0}\n{{\n'.format(cbuffer.name))
@@ -115,18 +112,14 @@ def constant_buffer(cbuffer: pysl.ConstantBuffer):
 
 
 def sampler(sampler: pysl.Sampler):
-    if g_root:
-        state = {}
-        state[pysl.Language.Export.NAME] = sampler.name
-        for key, val in sampler.attributes:
-            state[key] = val
-        g_root[pysl.Language.Export.SAMPLERS].append(state)
+    state = {}
+    state[pysl.Language.Export.NAME] = sampler.name
+    for key, val in sampler.attributes:
+        state[key] = val
+    g_root[pysl.Language.Export.SAMPLERS].append(state)
 
 
 def entry_point(func: pysl.Function):
-    if not g_root:
-        return
-
     if func.stage == pysl.Language.Decorator.VERTEX_SHADER:
         if pysl.Language.Decorator.VERTEX_SHADER in g_root:
             error(func, "Trying to export multiple VertexShader entry points, {0} is already registered".format(g_root[pysl.Language.Export.VERTEX_SHADER]))
@@ -137,3 +130,11 @@ def entry_point(func: pysl.Function):
             error(func, "Trying to export multiple PixelShader entry points, {0} is already registered".format(g_root[pysl.Language.Export.PIXEL_SHADER]))
             return
         g_root[pysl.Language.Export.PIXEL_SHADER] = func.name
+
+
+def query_entry_point(stage: str) -> str:
+    if stage == pysl.Language.Decorator.VERTEX_SHADER:
+        return g_root[pysl.Language.Export.VERTEX_SHADER]
+    elif stage == pysl.Language.Decorator.PIXEL_SHADER:
+        return g_root[pysl.Language.Export.PIXEL_SHADER]
+    return None

@@ -21,6 +21,11 @@ def init(path: str) -> bool:
     return True
 
 
+def finalize():
+    if g_out:
+        g_out.close()
+
+
 def write(string: str):
     g_out.write(string)
 
@@ -93,7 +98,7 @@ def constant_buffer(cbuffer: pysl.ConstantBuffer):
         write('\t{0} {1} : packoffset{2};\n'.format(TYPE(constant.type), constant.name, OFFSET_TO_CONSTANT(constant.offset)))
 
     if cbuffer.enforced_size is not None:
-        write('\tfloat __pysl_padding : packoffset({0});\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
+        write('\tfloat __{0}_padding : packoffset({1});\n'.format(cbuffer.name, OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
 
     write('};\n\n')
 

@@ -1,7 +1,7 @@
 import os
 from . import pysl
 
-_OUT = None
+g_out = None
 
 # Core
 # ------------------------------------------------------------------------------
@@ -9,17 +9,22 @@ _OUT = None
 
 def init(path: str) -> bool:
     try:
-        global _OUT
+        global g_out
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        _OUT = open(path, 'w')
+        g_out = open(path, 'w')
     except IOError as e:
         print("Failed to open file: {0} with error: {1}".format(path, e))
         return False
     return True
 
 
+def finalize():
+    if g_out:
+        g_out.close()
+
+
 def write(string: str):
-    _OUT.write(string)
+    g_out.write(string)
 
 
 def TYPE(type: str):
@@ -345,9 +350,9 @@ def constructor(type: str, args):
 
 
 def intrinsic(type: str, args):
-    if type == pysl.Language.Intrinsic.MUL:
+    if type == pysl.Language.Intrinsic.MUL.name:
         args[1]()
-        write('*')
+        write(' * ')
         args[0]()
     elif type.startswith(pysl.Language.Intrinsic.COL):
         args[0]()
@@ -368,7 +373,7 @@ def intrinsic(type: str, args):
         write(')')
     else:
         name = type
-        if type == pysl.Language.Intrinsic.LERP:
+        if type == pysl.Language.Intrinsic.LERP.name:
             name = 'mix'
 
         write('{0}('.format(name))

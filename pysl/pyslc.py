@@ -4,7 +4,8 @@ import argparse
 from . import pysl
 from . import emitter
 from . import exporter
-from .error import error, init, get_status
+from . import validator
+from .error import error, info, init, get_status
 
 
 def loc(node: ast.AST) -> pysl.Locationable:
@@ -431,10 +432,10 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
             if (node.value.id == pysl.Language.SpecialAttribute.INPUT or
                node.value.id == pysl.Language.SpecialAttribute.OUTPUT):
                 emitter.special_attribute(loc(node), func, node.value.id, node.attr)
+                return
 
-        else:
-            PYSL_eval(func, node.value)
-            emitter.text('.{0}'.format(node.attr))
+        PYSL_eval(func, node.value)
+        emitter.text('.{0}'.format(node.attr))
 
     elif isinstance(node, ast.IfExp):
         # Ternary if
@@ -809,6 +810,8 @@ def main() -> int:
     parser.add_argument('-oglsl45', type=str, action='store', default=None, help="GLSL destination path")
     parser.add_argument('-ojson', type=str, action='store', default=None, help="JSON metadata destination path")
     parser.add_argument('-ohpp', type=str, action='store', default=None, help="C++ header destination path")
+    parser.add_argument('-vhlsl5', type=str, action='store', default=None, help="HLSL compiler path for validation(fxc)")
+    parser.add_argument('-vglsl45', type=str, action='store', default=None, help="GLSL compiler path for validation(glslLangValidator)")
     args = parser.parse_args()
 
     if not emitter.init(args.ohlsl5, args.oglsl45):
@@ -822,9 +825,30 @@ def main() -> int:
     init(args.output)
     PYSL(args.output)
     exporter.finalize()
+    emitter.finalize()
 
     if get_status() is False:
+        error(None, 'Failed to compile: {0}, see above for more errors.'.format(args.output))
         return 1
+
+    if args.vhlsl5 and not args.ohlsl5:
+        error(None, "Requested HLSL validation, but no output was specified")
+        return 1
+
+    if args.vglsl45 and not args.oglsl45:
+        error(None, "Requested GLSL validation, but no output was specified")
+        return 1
+
+    if args.vhlsl5:
+        if not validator.validate_hlsl5(args.ohlsl5, args.vhlsl5):
+            error(None, "Failed to validate HLSL shader, see above for errors")
+            return 1
+
+    if args.vglsl45:
+        if not validator.validate_glsl45(args.oglsl45, args.vglsl45):
+            error(None, "Failed to validate GLSL shader, see above for errors")
+            return 1
+
     return 0
 
 
