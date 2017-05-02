@@ -106,14 +106,6 @@ class Constant(Locationable):
         self.offset: int = None
 
 
-class ConstantBuffer(Locationable):
-    def __init__(self):
-        Locationable.__init__(self)
-        self.name: str = None
-        self.constants: [Constant] = None
-        self.enforced_size: int = None
-
-
 class Function(Locationable):
     def __init__(self):
         Locationable.__init__(self)
@@ -144,6 +136,14 @@ class Sampler(Object):
         self.texture_name: str = None
         self.slot: int = None
         self.attributes: [(str, str)] = []
+
+
+class ConstantBuffer(Object):
+    def __init__(self):
+        Object.__init__(self)
+        self.name: str = None
+        self.constants: [Constant] = None
+        self.enforced_size: int = None
 
 
 class Language:
@@ -329,6 +329,9 @@ class Language:
     class SpecialAttribute:
         INPUT = 'input'
         OUTPUT = 'output'
+
+        def is_in(attr: str) -> bool:
+            return attr in [Language.SpecialAttribute.INPUT, Language.SpecialAttribute.OUTPUT]
 
     class Export:
         """Metadata export"""

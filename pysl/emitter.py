@@ -247,7 +247,7 @@ def intrinsic(loc: pysl.Locationable, type: str, args):
             error(loc, "Invalid number of arguments for intrinsic: {0}(). expected {1}, but found {2}".format(
                 intrin.name, intrin.num_args, len(args)))
             return
-        
+
         if g_hlsl:
             old, g_glsl = g_glsl, False
             hlsl5.intrinsic(type, args)
@@ -256,6 +256,19 @@ def intrinsic(loc: pysl.Locationable, type: str, args):
             old, g_hlsl = g_hlsl, False
             glsl45.intrinsic(type, args)
             g_hlsl = old
+
+
+def cast(type: str, val):
+    global g_hlsl, g_glsl
+
+    if g_hlsl:
+        old, g_glsl = g_glsl, False
+        hlsl5.cast(type, val)
+        g_glsl = old
+    if g_glsl:
+        old, g_hlsl = g_hlsl, False
+        glsl45.cast(type, val)
+        g_hlsl = old
 
 
 def function_call(loc: pysl.Locationable, function: str, args):
@@ -275,36 +288,46 @@ def function_call(loc: pysl.Locationable, function: str, args):
     text(')')
 
 
-# Using the function as locationable is not very good
-def special_attribute(loc: pysl.Locationable, func: pysl.Function, attribute: str, value: str):
-    if func.stage:
-        src_stage = func.stage
-        # Looking up associated stageinput
-        if attribute == pysl.Language.SpecialAttribute.INPUT:
-            src_stage += pysl.Language.Decorator.IN
-        elif attribute == pysl.Language.SpecialAttribute.OUTPUT:
-            src_stage += pysl.Language.Decorator.OUT
+# Location is specified as function is too generic
+def attribute(loc: pysl.Locationable, func: pysl.Function, attribute: str, value: str):
+    if pysl.Language.SpecialAttribute.is_in(attribute):
+        if func.stage:
+            src_stage = func.stage
+            # Looking up associated stageinput
+            if attribute == pysl.Language.SpecialAttribute.INPUT:
+                src_stage += pysl.Language.Decorator.IN
+            elif attribute == pysl.Language.SpecialAttribute.OUTPUT:
+                src_stage += pysl.Language.Decorator.OUT
 
-        si = None
-        for name, symbol in g_symbols.items():
-            if isinstance(symbol, pysl.StageInput) and src_stage in symbol.stages:
-                si = symbol
+            si = None
+            for name, symbol in g_symbols.items():
+                if isinstance(symbol, pysl.StageInput) and src_stage in symbol.stages:
+                    si = symbol
 
-        if si is None:
-            error(loc, "Failed to find StageInput that matches attribute: {0} inside: {1}".format(attribute, func.name))
-            return
-
-        if si.get_element(value) is None:
-            error(loc, "Undeclared attribute: {0}.{1} inside: {2}".format(attribute, value, func.name))
-            return
-
-        if g_hlsl:
-            hlsl5.special_attribute(src_stage, si, attribute, value)
-        if g_glsl:
-            glsl45.special_attribute(src_stage, si, attribute, value)
-    else:
-        for arg in func.args:
-            if arg.name == attribute:
-                text('{0}.'.format(attribute))
+            if si is None:
+                error(loc, "Failed to find StageInput that matches attribute: {0} inside: {1}".format(attribute, func.name))
                 return
-            error(loc, "Special attribute: {0} has valid meaning only inside an entry point, see documentation for more details".format(attribute))
+
+            if si.get_element(value) is None:
+                error(loc, "Undeclared attribute: {0}.{1} inside: {2}".format(attribute, value, func.name))
+                return
+
+            if g_hlsl:
+                hlsl5.special_attribute(src_stage, si, attribute, value)
+            if g_glsl:
+                glsl45.special_attribute(src_stage, si, attribute, value)
+        else:
+            for arg in func.args:
+                if arg.name == attribute:
+                    text('{0}.'.format(attribute))
+                    return
+                error(loc, "Special attribute: {0} has valid meaning only inside an entry point, see documentation for more details".format(attribute))
+    else:
+        obj = g_symbols[attribute]
+        if obj:
+            if g_hlsl:
+                hlsl5.member(obj, value)
+            if g_glsl:
+                glsl45.member(obj, value)
+        else:
+            text('{0}.'.format(attribute))

@@ -16,7 +16,9 @@ def init(filename: str):
 
 
 def get_status() -> bool:
-    return g_compilation_status
+    if g_compilation_status:
+        return g_compilation_status
+    return False
 
 
 def error(loc: pysl.Locationable, msg: str):
@@ -28,6 +30,3 @@ def error(loc: pysl.Locationable, msg: str):
     global g_compilation_status
     g_compilation_status = False
 
-
-def info(msg: str):
-    sys.stdout.write('info: {0}\n'.format(msg))

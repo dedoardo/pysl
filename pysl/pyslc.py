@@ -5,7 +5,7 @@ from . import pysl
 from . import emitter
 from . import exporter
 from . import validator
-from .error import error, info, init, get_status
+from .error import error, init, get_status
 
 
 def loc(node: ast.AST) -> pysl.Locationable:
@@ -429,13 +429,10 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
     elif isinstance(node, ast.Attribute):
         # node.attr is the attribute name (string)
         if isinstance(node.value, ast.Name):
-            if (node.value.id == pysl.Language.SpecialAttribute.INPUT or
-               node.value.id == pysl.Language.SpecialAttribute.OUTPUT):
-                emitter.special_attribute(loc(node), func, node.value.id, node.attr)
-                return
-
-        PYSL_eval(func, node.value)
-        emitter.text('.{0}'.format(node.attr))
+            emitter.attribute(loc(node), func, node.value.id, node.attr)
+        else:
+            PYSL_eval(func, node.value)
+            emitter.text('.{0}'.format(node.attr))
 
     elif isinstance(node, ast.IfExp):
         # Ternary if
@@ -457,13 +454,8 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
         if op_str == '@':
             if not isinstance(node.left, ast.Name):
                 error(loc(node.left), "Expected type to the left of the cast operator")
-            elif not pysl.Language.NativeType.is_in(node.left.id):
-                error(loc(node.left), "Invalid destination type: {0}".format(node.left.id))
             else:
-                emitter.text('(')
-                PYSL_eval(func, node.left)
-                emitter.text(')')
-                PYSL_eval(func, node.right)
+                emitter.cast(node.left.id, EvalClosure(func, node.right))
         else:
             PYSL_eval(func, node.left)
             emitter.text(' {0} '.format(op_str))
@@ -521,6 +513,11 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
     elif isinstance(node, ast.Expr):
         PYSL_eval(func, node.value)
 
+    elif isinstance(node, ast.Dict):
+        if len(node.values) > 0:
+            error(loc(node), "PYSL: Dictionaries are not supported")
+        else:
+            emitter.text('{}')
     else:
         print(node)
         error(loc(node), "PYSL : Unsupported expression")
@@ -839,16 +836,19 @@ def main() -> int:
         error(None, "Requested GLSL validation, but no output was specified")
         return 1
 
+    validation_failed = False
     if args.vhlsl5:
         if not validator.validate_hlsl5(args.ohlsl5, args.vhlsl5):
             error(None, "Failed to validate HLSL shader, see above for errors")
-            return 1
+            validation_failed = True
 
     if args.vglsl45:
         if not validator.validate_glsl45(args.oglsl45, args.vglsl45):
             error(None, "Failed to validate GLSL shader, see above for errors")
-            return 1
+            validation_failed = True
 
+    if validation_failed:
+        return 1
     return 0
 
 

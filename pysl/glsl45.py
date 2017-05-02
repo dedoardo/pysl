@@ -37,7 +37,10 @@ def TYPE(type: str):
         'mat3x2', 'mat3x3', 'mat3x4',
         'mat4x2', 'mat4x3', 'mat4x4'
     ]
-    return type_map[pysl.Language.NativeType._ALL.index(type)]
+    try:
+        return type_map[pysl.Language.NativeType._ALL.index(type)]
+    except ValueError:
+        return type
 
 
 def OFFSET_TO_CONSTANT(offset: int):
@@ -47,7 +50,7 @@ def OFFSET_TO_CONSTANT(offset: int):
 def declaration(declaration: pysl.Declaration):
     for qualifier in declaration.qualifiers:
         write('{0} '.format(qualifier))
-    write('{0} {1}'.format(declaration.type, declaration.name))
+    write('{0} {1}'.format(TYPE(declaration.type), declaration.name))
 
 
 # Top-level
@@ -65,13 +68,30 @@ def struct(struct: pysl.Struct):
     write('};\n\n')
 
 
+def SEMANTIC_TYPE(semantic: str, stage: str) -> str:
+    semantic_type_map = [
+        'float',
+        'float',
+        'float',
+        'int',
+        'bool',
+        'vec4',
+        'int',
+        'int',
+        'int',
+        'vec4',
+        'int'
+    ]
+    return semantic_type_map[pysl.Language.Semantic._ALL.index(semantic)]
+
+
 def SEMANTIC(semantic: str, stage: str) -> str:
     if stage == pysl.Language.Decorator.PIXEL_SHADER and semantic == pysl.Language.Semantic.POSITION:
         return 'gl_FragCoord'
 
     semantic_map = [
-        'gl_ClipDistance',
-        'gl_CullDistance',
+        'gl_ClipDistance[]',
+        'gl_CullDistance[]',
         'gl_FragDepth',
         'gl_InstanceID',
         'gl_FrontFacing',
@@ -114,11 +134,12 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
             is_builtin = True if element.semantic[:3] == 'SV_' else False
             if element.semantic.startswith(pysl.Language.Semantic.TARGET):  # Only valid as output
                 slot = int(element.semantic[(len(pysl.Language.Semantic.TARGET)):])
-                write('layout(location={0}) out {1} __{2}_{3};\n'.format(slot, TYPE(element.type.str), dest_qualifier, element.name))
+                write('layout(location={0}) out {1} _{2}_{3};\n'.format(slot, TYPE(element.type.str), dest_qualifier, element.name))
             elif is_builtin:
-                write('{0} {1} {2};\n'.format(dest_qualifier, TYPE(element.type.str), SEMANTIC(element.semantic, cur_stage)))
+                pass
+                #write('{0} {1} {2};\n'.format(dest_qualifier, SEMANTIC_TYPE(element.semantic, cur_stage), SEMANTIC(element.semantic, cur_stage)))
             else:
-                write('layout (location={0}) {1} {2} __{3}_{4};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type.str), dest_qualifier, element.name))
+                write('layout (location={0}) {1} {2} _{3}_{4};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type.str), dest_qualifier, element.name))
         write('#endif\n\n')
 
 
@@ -131,16 +152,16 @@ def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageI
 
 
 def entry_point_end(func: pysl.Function):
-    write('};\n')
+    write('}\n')
     write('#endif\n\n')
 
 
 def constant_buffer(cbuffer: pysl.ConstantBuffer):
     write('layout(std140) uniform {0}\n{{\n'.format(cbuffer.name))
     for constant in cbuffer.constants:
-        write('\tlayout(offset = {0}) {1} {2};\n'.format(OFFSET_TO_CONSTANT(constant.offset), TYPE(constant.type.str), constant.name))
+        write('\tlayout(offset = {0}) {1} {2}_{3};\n'.format(OFFSET_TO_CONSTANT(constant.offset), TYPE(constant.type.str), cbuffer.name, constant.name))
     if cbuffer.enforced_size is not None:
-        write('\tlayout(offset = {0}) float __pysl_padding;\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
+        write('\tlayout(offset = {0}) float {1}_pysl_padding;\n'.format(OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1), cbuffer.name))
     write('};\n\n')
 
 
@@ -335,6 +356,11 @@ def method_call(caller: pysl.Object, method: str, args):
             _sampler_gather(caller, args)
 
 
+def member(caller: pysl.Object, value: str):
+    if isinstance(caller, pysl.ConstantBuffer):
+        write('{0}_{1}'.format(caller.name, value))
+
+
 def _args(args):
     for i in range(len(args) - 1):
         args[i]()
@@ -381,6 +407,12 @@ def intrinsic(type: str, args):
         write(')')
 
 
+def cast(type: str, val):
+    write('{0}('.format(TYPE(type)))
+    val()
+    write(')')
+
+
 def special_attribute(stage: str, si: pysl.StageInput, attribute: str, value: str):
     # Checking if the attribute is special
     semantic = si.get_element(value).semantic
@@ -389,6 +421,6 @@ def special_attribute(stage: str, si: pysl.StageInput, attribute: str, value: st
     if not semantic.startswith(pysl.Language.Semantic.TARGET) and is_builtin:
         write(SEMANTIC(semantic, stage))
     elif attribute == pysl.Language.SpecialAttribute.INPUT:
-        write('__in_{0}'.format(value))
+        write('_in_{0}'.format(value))
     elif attribute == pysl.Language.SpecialAttribute.OUTPUT:
-        write('__out_{0}'.format(value))
+        write('_out_{0}'.format(value))

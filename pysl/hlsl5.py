@@ -89,16 +89,16 @@ def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageI
 
 def entry_point_end(func: pysl.Function):
     write('\treturn {0};\n'.format(pysl.Language.SpecialAttribute.OUTPUT))
-    write('};\n\n')
+    write('}\n\n')
 
 
 def constant_buffer(cbuffer: pysl.ConstantBuffer):
     write('cbuffer {0}\n{{\n'.format(cbuffer.name))
     for constant in cbuffer.constants:
-        write('\t{0} {1} : packoffset{2};\n'.format(TYPE(constant.type), constant.name, OFFSET_TO_CONSTANT(constant.offset)))
+        write('\t{0} {1}_{2} : packoffset({3});\n'.format(TYPE(constant.type), cbuffer.name, constant.name, OFFSET_TO_CONSTANT(constant.offset)))
 
     if cbuffer.enforced_size is not None:
-        write('\tfloat __{0}_padding : packoffset({1});\n'.format(cbuffer.name, OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
+        write('\tfloat _{0}_padding : packoffset({1});\n'.format(cbuffer.name, OFFSET_TO_CONSTANT(cbuffer.enforced_size - 1)))
 
     write('};\n\n')
 
@@ -286,6 +286,11 @@ def method_call(caller: pysl.Object, method: str, args):
             _sampler_gather(caller, args)
 
 
+def member(caller: pysl.Object, value: str):
+    if isinstance(caller, pysl.ConstantBuffer):
+        write('{0}_{1}'.format(caller.name, value))
+
+
 def _args(args):
     for i in range(len(args) - 1):
         args[i]()
@@ -322,6 +327,11 @@ def intrinsic(type: str, args):
         write('{0}('.format(type))
         _args(args)
         write(')')
+
+
+def cast(type: str, val):
+    write('({0})'.format(type))
+    val()
 
 
 def special_attribute(stage: str, si: pysl.StageInput, attribute: str, value: str):
