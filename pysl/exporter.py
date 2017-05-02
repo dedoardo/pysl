@@ -11,15 +11,16 @@ g_cpp = None
 
 CPP_HEADER = """#pragma once
 #if defined(_MSC_VER) || defined(__GNUG_)
-#   define PACKED
+#   define PYSL_PACKED
 #   pragma pack(push, 1)
 #else
-#   define PACKED __attribute((packed))
-#endif
+#   define PYSL_PACKED __attribute((packed))
+#endif\n
 """
 
-CPP_FOOTER = """#if defined(_MSC_VER) || defined(__GNUG_)
-#pragma pack(pop)
+CPP_FOOTER = """
+#if defined(_MSC_VER) || defined(__GNUG_)
+#   pragma pack(pop)
 #endif
 """
 
@@ -109,7 +110,7 @@ def constant_buffer(cbuffer: pysl.ConstantBuffer):
             elif diff > 0:
                 g_cpp.write('\tfloat __pysl_padding{0}[{1}];\n'.format(paddings, diff))
 
-        g_cpp.write('};\n')
+        g_cpp.write('} PYSL_PACKED;\n')
         g_cpp.write('static_assert(sizeof({0}) == {1}, "Invalid size");\n\n'.format(cbuffer.name, cbuffer.enforced_size * 4))
 
 
