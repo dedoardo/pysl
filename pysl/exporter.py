@@ -110,7 +110,7 @@ def constant_buffer(cbuffer: pysl.ConstantBuffer):
         g_cpp.write('} PYSL_PACKED;\n')
         for constant in cbuffer.constants:
             if constant.offset:
-                g_cpp.write('static_assert(offsetof({0}, {1}) == {2}'.format(cbuffer.name, constant.name, constant.offset * 4))
+                g_cpp.write('static_assert(offsetof({0}, {1}) == {2}, "Invalid offset"));\n'.format(cbuffer.name, constant.name, constant.offset * 4))
         g_cpp.write('static_assert(sizeof({0}) == {1}, "Invalid size");\n\n'.format(cbuffer.name, cbuffer.enforced_size * 4))
 
 
