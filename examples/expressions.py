@@ -43,7 +43,7 @@ default_sampler : register(Sampler2D, 0) = export(COW=0, MOO=1)
 def VS():
     a : const.Sample = { float4(0.0, 0.0, 0.0, 0.0) }
     world_pos : float4 = mul(float4(input.position, 1.0), PerObject.world)
-    
+
     output.position = mul(world_pos, PerFrameSep.view_projection)
 
     'normals'
