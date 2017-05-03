@@ -30,7 +30,6 @@
 ## What is it
 *PYSL* is a subset of [Python 3.6](https://www.python.org/about/) that is translatable to *HLSL* and *GLSL*. There is no special syntax, the code is **syntactically valid** Python. The specification contains a list of operators, decorators and tokens that are recognized by the compiler (`pyslc`). 
 The code has to be valid python because the input file is parsed into an [AST](https://docs.python.org/3/library/ast.html) that is then traversed and written out as *HLSL*, *GLSL* or both. As the output is readable (blank lines are also preserved) later tweaks can and should be done if needed or possible. Current outputs are [**HLSL Shader Model 5**](https://msdn.microsoft.com/en-us/library/windows/desktop/ff471356(v=vs.85).aspx) and [**GLSL 4.5**](https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.50.pdf).
-The source code should hopefully be easily readable and adds up to a couple thousand lines of code. All the special tokens can be customized in `pysl/pysl.py`.
 `pyslc` in addition to *HLSL* and *GLSL* allows to export metadata in *JSON* containing entry points, compile flags, resources and more custom data.  
 C++ headers can also be exported containing structure definitions made to match the layout of the one specified in the shader. 
 For more information see [Usage](#usage).

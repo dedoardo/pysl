@@ -415,7 +415,7 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
                               [EvalClosure(func, n) for n in node.args])
         # - Constructor, just a new type being declared
         elif pysl.Language.NativeType.is_in(node.func.id):
-            emitter.constructor(node.func.id,
+            emitter.constructor(loc(node.func), node.func.id,
                                 [EvalClosure(func, n) for n in node.args])
         # - '_' is the special code for the preprocessor, writes the string
         # contained in the braces as it is

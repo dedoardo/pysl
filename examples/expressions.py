@@ -37,11 +37,12 @@ class PerFrameSep:
     view_projection : float4x4 = 0
     view : float4x4 = 16
 
-default_sampler : register(Sampler2D, 0) = export(COW=0, MOO=1)
+default_sampler : register(Sampler2D, 0) = export(KEY0=ZERO, KEY2=1, KEY3="3")
 
 @VS
 def VS():
-    a : const.Sample = { float4(0.0, 0.0, 0.0, 0.0) }
+    a : const.Sample = { float4(1.0) }
+    b : float3x3 = float3x3(0, 1, 2, 3, 4, 5, 6, 7, 8)
     world_pos : float4 = mul(float4(input.position, 1.0), PerObject.world)
 
     output.position = mul(world_pos, PerFrameSep.view_projection)

@@ -150,7 +150,9 @@ class Language:
     class NativeType:
         """
         Unwrapped list of all supported types. (All supproted permutations
-        of pysl.Type). see README for details on how to construct native types
+        of pysl.Type). see README for details on how to construct native types.
+
+        DO NOT MODIFY THEM, NOR CHANGE THEIR ORDER
         """
         _ALL = [
             'bool', 'bool2', 'bool3', 'bool4',
@@ -163,8 +165,29 @@ class Language:
         ]
 
         @staticmethod
-        def is_in(ctor: str) -> bool:
-            return ctor in Language.NativeType._ALL
+        def is_in(type: str) -> bool:
+            return type in Language.NativeType._ALL
+
+        @staticmethod
+        def is_vector(type: str) -> bool:
+            return type in ['bool2', 'bool3', 'bool4',
+                            'int2', 'int3', 'int4',
+                            'uint2', 'uint3', 'uint4',
+                            'float2', 'float3', 'float4']
+
+        @staticmethod
+        def is_matrix(type: str) -> bool:
+            return type in ['float2x2', 'float2x3', 'float2x4',
+                            'float3x2', 'float3x3', 'float3x4',
+                            'float4x2', 'float4x3', 'float4x4']
+
+        @staticmethod
+        def num_arguments(type: str) -> [int]:
+            if Language.NativeType.is_vector(type):
+                return range(int(type[-1]))
+            elif Language.NativeType.is_matrix(type):
+                return [int(type[-1]) * int(type[-3]), int(type[-1])]
+            return [1]
 
     class Intrinsic:
         """

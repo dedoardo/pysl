@@ -300,9 +300,20 @@ def _args(args):
 
 
 def constructor(type: str, args):
-    write('{0}('.format(type))
-    _args(args)
-    write(')')
+    # Scalars and matrices work the same way
+    if len(args) == 1 and pysl.Language.NativeType.is_vector(type):
+        comps = int(type[-1])
+        val = args[0]
+        write('{0}('.format(type))
+        for comp in range(comps):
+            val()
+            if comp < comps - 1:
+                write(', ')
+        write(')')
+    else:
+        write('{0}('.format(type))
+        _args(args)
+        write(')')
 
 
 def intrinsic(type: str, args):

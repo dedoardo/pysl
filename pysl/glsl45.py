@@ -370,9 +370,21 @@ def _args(args):
 
 
 def constructor(type: str, args):
-    write('{0}('.format(TYPE(type)))
-    _args(args)
-    write(')')
+    if pysl.Language.NativeType.is_matrix(type):
+        rows = int(type[-1])
+        cols = int(type[-3])
+        write('{0}('.format(TYPE(type)))
+        for r in range(rows):
+            for c in range(cols):
+                idx = c * rows + r
+                args[idx]()
+                if r < rows - 1 or c < cols - 1:
+                    write(', ')
+        write(')')
+    else:
+        write('{0}('.format(TYPE(type)))
+        _args(args)
+        write(')')
 
 
 def intrinsic(type: str, args):

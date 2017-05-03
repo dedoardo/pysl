@@ -223,9 +223,14 @@ def method_call(loc: pysl.Locationable, caller: str, name: str, args):
         g_hlsl = old
 
 
-def constructor(typename: str, args):
+def constructor(loc: pysl.Locationable, typename: str, args):
     """Type constructor, assuming that typename is in pysl.TYPES"""
     global g_hlsl, g_glsl
+
+    exp_num_args = pysl.Language.NativeType.num_arguments(typename)
+    if len(args) not in exp_num_args:
+        error(loc, "{0} constructor expected {1} arguments, but found: {2}".format(typename, exp_num_args, len(args)))
+        return
 
     if g_hlsl:
         old, g_glsl = g_glsl, False
