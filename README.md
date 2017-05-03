@@ -167,7 +167,7 @@ foo : float3 = float3(0.0, 0.0, 0.0)
 foo : float3 = float3(float2(0.0, 0.0), 0.0)
 foo : float4 = float4(0.0, float2(0.0, 0.0), 0.0)
 ```
-Vector can also be initialized from a single value. The constructor needs to be repeated, otherwise the compiler won't recognize the construction and will just be like assigning a single float to a vector (which is valid HLSL, but not HLSL)
+Vector can also be initialized from a single value. The constructor needs to be repeated, otherwise the compiler won't recognize the construction and will just be like assigning a single float to a vector (which is valid GLSL, but not HLSL)
 ```python
 foo : float3 = float3(1.f) # OK
 foo : float3 = 1.0 # INVALID
