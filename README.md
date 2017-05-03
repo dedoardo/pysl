@@ -36,10 +36,10 @@ C++ headers can also be exported containing structure definitions made to match 
 For more information see [Usage](#usage).
 
 ##### Disclaimer
-This is not a full-fledged compiler. `pyslc` allows evaluation of the output (using `fxc` and `glsllangValidator`), but a correctly compiled *PYSL* script is **not guaranteed** to be a valid shader. If you try to access the `z` component of a 2D vector, it's easier to let the backend compiler complain. This does not mean that there is no type-checking and such, but it is strictly limited to what concerns *PYSL* specific features, nothing else.
-*PYSL* has actually not that many special tokens and pretty much everything you need to know is contained inside this very README.
-This is meant for people who already have some knowledge of a shading language, the documentation reflects this.
-This is not the ultimate solution, it aims at saving **~50% of the work**. The extra time that might be required to tweak the output is made up by the less verbosity of python compared to C-like code.
+This is not a full-fledged compiler. `pyslc` allows evaluation of the output (using `fxc` and `glsllangValidator`), but a correctly compiled *PYSL* script is **not guaranteed** to be a valid shader. If you try to access the `z` component of a 2D vector, it's easier to let the backend compiler complain. This does not mean that there is no type-checking and such, but it is strictly limited to what concerns *PYSL* specific features, nothing else.  
+*PYSL* has actually not that many special tokens and pretty much everything you need to know is contained inside this very README.  
+This is meant for people who already have some knowledge of a shading language, the documentation reflects this.  
+This is not the ultimate solution, it aims at saving **~50% of the work**. The extra time that might be required to tweak the output is made up by the less verbosity of python compared to C-like code.  
 Nonetheless the output is valid shader code and with some attention complex and valid shaders can be written and compiled directly.
 
 ## Usage
@@ -93,15 +93,14 @@ void foo()
 Non-opaque native types are 1-1 mapped to *HLSL* types.
 ##### Scalar
 Supported scalar types: `void`, `bool`, `int`, `uint`, `float`
-Unsupported scalar types: `double`, `half`, `dword`
+Unsupported scalar types: `double`, `half`, `dword`  
 **`double`** is not supported because of a literal problem, waiting to find a clean way to specify it.
 
 ##### Vector Matrix
-Vector: `<scalar_type><elements>`
-Matrix: `<scalar_type><rows><cols>`
-Non scalar types can have `2`, `3` or `4` components. To make life easier `1` components are not supported, 
-just use the corresponding scalar or vector type. 
-This is because *HLSL* allows `float1x4` but *GLSL* doesn't compile `vec1`.
+Vector: `<scalar_type><elements>`  
+Matrix: `<scalar_type><rows><cols>`  
+Non scalar types can have `2`, `3` or `4` components. To make life easier `1` components are not supported, just use the corresponding scalar or vector type.   
+This is because *HLSL* allows `float1x4` but *GLSL* doesn't compile `vec1`.  
 Additional documentation(HLSL): [Link](https://msdn.microsoft.com/en-us/library/windows/desktop/bb509707(v=vs.85).aspx)
 
 ### Casting
