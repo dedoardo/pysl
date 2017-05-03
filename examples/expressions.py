@@ -1,7 +1,6 @@
-options('moo1', 'moo2')
-
+"cow"
 @StageInput(VSin)
-class VertexInpust:
+class VertexInput:
     position : float3 = POSITION0
     normal : float3 = NORMAL0
     texcoord : float2 = TEXCOORD0
@@ -44,12 +43,15 @@ default_sampler : register(Sampler2D, 0) = export(COW=0, MOO=1)
 def VS():
     a : const.Sample = { float4(0.0, 0.0, 0.0, 0.0) }
     world_pos : float4 = mul(float4(input.position, 1.0), PerObject.world)
+    
     output.position = mul(world_pos, PerFrameSep.view_projection)
+
+    'normals'
     output.normal = mul(input.normal, float3x3@PerObject.world)
     output.normal = normalize(output.normal)
-    output.depth.xy = output.position.zw
 
 @PS
 def PS():
+    'Random'
     output.depth = input.depth.x / input.depth.y
     output.normal = input.normal

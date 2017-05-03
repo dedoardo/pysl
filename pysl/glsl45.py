@@ -381,10 +381,11 @@ def intrinsic(type: str, args):
         write(' * ')
         args[0]()
     elif type.startswith(pysl.Language.Intrinsic.COL):
+        comps = int(type[-1])
         args[0]()
         write('[')
         args[1]()
-        write(']')
+        write('].{0}'.format('xyzw'[:comps]))
     elif type.startswith(pysl.Language.Intrinsic.ROW):
         mat = args[0]
         row = args[1]

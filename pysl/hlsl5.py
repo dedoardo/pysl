@@ -319,10 +319,11 @@ def intrinsic(type: str, args):
             write(']{0}'.format(', ' if comp < comps - 1 else ''))
         write(')')
     elif type.startswith(pysl.Language.Intrinsic.ROW):
+        comps = int(type[-1])
         args[0]()
         write('[')
         args[1]()
-        write(']')
+        write('].{0}'.format('xyzw'[:comps]))
     else:
         write('{0}('.format(type))
         _args(args)

@@ -515,12 +515,12 @@ def PYSL_eval(func: pysl.Function, node: ast.AST):
 
     elif isinstance(node, ast.Dict):
         if len(node.values) > 0:
-            error(loc(node), "PYSL: Dictionaries are not supported")
+            error(loc(node), "Unsupported dictionary expression")
         else:
             emitter.text('{}')
     else:
         print(node)
-        error(loc(node), "PYSL : Unsupported expression")
+        error(loc(node), "Unsupported expression")
 
 
 def INDENT(indent: int):
@@ -528,8 +528,16 @@ def INDENT(indent: int):
 
 
 def PYSL_block(func: pysl.Function, nodes: [ast.AST], indent: int):
+    last_line = loc(nodes[0]).line if nodes else None
     """Evaluates line by line all the instructions"""
     for node in nodes:
+        # Preserving spaces
+        cur_line = loc(node).line
+        line_diff = cur_line - last_line
+        if line_diff > 1:
+            emitter.text('\n' * (line_diff - 1))
+        last_line = cur_line
+
         if isinstance(node, ast.Pass):
             pass
         elif isinstance(node, ast.Assign):
@@ -551,8 +559,11 @@ def PYSL_block(func: pysl.Function, nodes: [ast.AST], indent: int):
             if isinstance(node.value, ast.Call):
                 if node.value.func.id is '_':
                     emitter.text(parse_preprocessor(node.value) + '\n')
+            elif isinstance(node.value, ast.Str):
+                INDENT(indent)
+                emitter.text('/*{0}*/\n'.format(node.value.s))
             else:
-                error(loc(node), "Unsupported block expression")
+                error(loc(node), "Unsupported block-level expression")
 
         elif isinstance(node, ast.AugAssign):
             INDENT(indent)
@@ -666,7 +677,7 @@ def PYSL_block(func: pysl.Function, nodes: [ast.AST], indent: int):
             emitter.text('break;\n')
 
         else:
-            error((node), "Unsupported block expression")
+            error((node), "Unsupported block-level expression")
 
 
 def PYSL_arg(func: ast.FunctionDef, arg: ast.arg) -> pysl.Declaration:
@@ -744,13 +755,13 @@ def PYSL(path: str):
         with open(path, 'r') as file:
             text = file.read()
     except IOError as e:
-        print("Failed to open '{0}' error: {1}".format(path, e))
+        error(None, "Failed to open '{0}' error: {1}".format(path, e))
         return
 
     try:
         root = ast.parse(text)
     except SyntaxError as e:
-        print("Failed to parse '{0}' error: {1}".format(path, e))
+        error(None, "Failed to parse '{0}' error: {1}".format(path, e))
         return
 
     for node in ast.iter_child_nodes(root):
@@ -790,7 +801,10 @@ def PYSL(path: str):
                 else:
                     error(loc(node), "Unsupported top-level function call")
             else:
-                error((node), "Unsupported top-level expression")
+                if isinstance(node.value, ast.Str):
+                    emitter.text('/*{0}*/\n'.format(node.value.s))
+                else:
+                    error(loc(node), "Unsupported top-level expression")
 
         else:
             error(loc(node), "Unsupported top-level expression")
