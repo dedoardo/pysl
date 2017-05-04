@@ -184,7 +184,7 @@ class Language:
         @staticmethod
         def num_arguments(type: str) -> [int]:
             if Language.NativeType.is_vector(type):
-                return range(int(type[-1]))
+                return list(range(1, int(type[-1]) + 1))
             elif Language.NativeType.is_matrix(type):
                 return [int(type[-1]) * int(type[-3]), int(type[-1])]
             return [1]

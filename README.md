@@ -106,6 +106,7 @@ Additional documentation(HLSL): [Link](https://msdn.microsoft.com/en-us/library/
 Currently casting is done via the `@` operator following the syntax:
 `<dest_type>@<name>`
 ```
+PYSL: <dest_type>@<name>
 HLSL: (<dest_type>)<name>
 GLSL: <dest_type>(<name>)
 ```
