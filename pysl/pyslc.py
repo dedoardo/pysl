@@ -816,7 +816,7 @@ def main() -> int:
         sys.exit()
 
     parser = argparse.ArgumentParser(description='PYthon Shading Language compiler')
-    parser.add_argument('output')
+    parser.add_argument('input')
     parser.add_argument('-ohlsl5', type=str, action='store', default=None, help="HLSL destination path")
     parser.add_argument('-oglsl45', type=str, action='store', default=None, help="GLSL destination path")
     parser.add_argument('-ojson', type=str, action='store', default=None, help="JSON metadata destination path")
@@ -833,13 +833,13 @@ def main() -> int:
         print('Failed to open destination metadata file, check permissions or paths')
         sys.exit()
 
-    init(args.output)
-    PYSL(args.output)
+    init(args.input)
+    PYSL(args.input)
     exporter.finalize()
     emitter.finalize()
 
     if get_status() is False:
-        error(None, 'Failed to compile: {0}, see above for more errors.'.format(args.output))
+        error(None, 'Failed to compile: {0}, see above for more errors.'.format(args.input))
         return 1
 
     if args.vhlsl5 and not args.ohlsl5:

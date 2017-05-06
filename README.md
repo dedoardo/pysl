@@ -46,12 +46,12 @@ Nonetheless the output is valid shader code and with some attention complex and 
 ```ruby
 usage: pysl.py [-h] [-ohlsl5 OHLSL5] [-oglsl45 OGLSL45] [-ojson OJSON]
                [-ohpp OHPP] [-vhlsl5 VHLSL5] [-vglsl45 VGLSL45]
-               output
+               input
 
 PYthon Shading Language compiler
 
 positional arguments:
-  output
+  input
 
 optional arguments:
   -h, --help        show this help message and exit
