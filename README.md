@@ -81,10 +81,10 @@ def foo() -> float:
 Gets translated to
 ```c
 /*foo routine*/
-void foo() 
+float foo() 
 { 
     /*Returns a random number*/
-    return 1.0; 
+    return 0.3;
 }
 ```
 
