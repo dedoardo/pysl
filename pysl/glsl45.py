@@ -5,7 +5,16 @@ g_out = None
 
 # Core
 # ------------------------------------------------------------------------------
-
+SSO_VS_OUT_DECL = '''
+#ifdef PYSL_VERTEX_SHADER
+out gl_PerVertex
+{
+    vec4 gl_Position;
+    float gl_PointSize;
+    float gl_ClipDistance[];
+};
+#endif
+'''
 
 def init(path: str) -> bool:
     try:
@@ -15,6 +24,7 @@ def init(path: str) -> bool:
     except IOError as e:
         print("Failed to open file: {0} with error: {1}".format(path, e))
         return False
+    g_out.write(SSO_VS_OUT_DECL)
     return True
 
 
@@ -125,9 +135,9 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
     for stage in si.stages:
         cur_stage = stage[:2]
         if cur_stage == pysl.Language.Decorator.VERTEX_SHADER:
-            write('#if defined(PYSL_VERTEX_SHADER)\n')
+            write('#ifdef PYSL_VERTEX_SHADER\n')
         elif cur_stage == pysl.Language.Decorator.PIXEL_SHADER:
-            write('#if defined(PYSL_PIXEL_SHADER)\n')
+            write('#ifdef PYSL_PIXEL_SHADER\n')
 
         dest_qualifier = stage[2:]
         for element in si.elements:
@@ -145,9 +155,9 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
 
 def entry_point_beg(func: pysl.Function, sin: pysl.StageInput, sout: pysl.StageInput):
     if func.stage == pysl.Language.Decorator.VERTEX_SHADER:
-        write('#if defined(PYSL_VERTEX_SHADER)\n')
+        write('#ifdef PYSL_VERTEX_SHADER\n')
     elif func.stage == pysl.Language.Decorator.PIXEL_SHADER:
-        write('#if defined(PYSL_PIXEL_SHADER)\n')
+        write('#ifdef PYSL_PIXEL_SHADER\n')
     write('void {0}()\n{{\n'.format(func.name))
 
 
