@@ -14,6 +14,7 @@ out gl_PerVertex
     float gl_ClipDistance[];
 };
 #endif
+
 '''
 
 def init(path: str) -> bool:
@@ -141,6 +142,8 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
 
         dest_qualifier = stage[2:]
         for element in si.elements:
+            for cond in element.conditions:
+                write('{0}\n'.format(cond))
             is_builtin = True if element.semantic[:3] == 'SV_' else False
             if element.semantic.startswith(pysl.Language.Semantic.TARGET):  # Only valid as output
                 slot = int(element.semantic[(len(pysl.Language.Semantic.TARGET)):])
@@ -150,6 +153,8 @@ def stage_input(si: pysl.StageInput, prev_sis: [pysl.StageInput]):
                 #write('{0} {1} {2};\n'.format(dest_qualifier, SEMANTIC_TYPE(element.semantic, cur_stage), SEMANTIC(element.semantic, cur_stage)))
             else:
                 write('layout (location={0}) {1} {2} _{3}_{4};\n'.format(LOCATION(element, si, prev_sis, stage), dest_qualifier, TYPE(element.type.str), dest_qualifier, element.name))
+        for cond in si.post_conditions:
+            write('{0}\n'.format(cond))
         write('#endif\n\n')
 
 
