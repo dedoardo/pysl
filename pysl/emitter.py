@@ -177,6 +177,12 @@ def function_end(func: pysl.Function):
     else:
         text('};\n\n')
 
+def entry_point_ret(func: pysl.Function):
+    if func.stage:
+        if g_hlsl:
+            hlsl5.entry_point_ret(func)
+        if g_glsl:
+            glsl45.entry_point_ret(func)
 
 # BLOCK-LEVEL
 # ------------------------------------------------------------------------------

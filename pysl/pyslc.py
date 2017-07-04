@@ -574,8 +574,11 @@ def PYSL_block(func: pysl.Function, nodes: [ast.AST], indent: int):
 
         elif isinstance(node, ast.Return):
             INDENT(indent)
-            emitter.text('return ')
-            PYSL_eval(func, node.value)
+            if func.stage is not None:
+                emitter.entry_point_ret(func)
+            else:
+                emitter.text('return ')
+                PYSL_eval(func, node.value)
             emitter.text(';\n')
         elif isinstance(node, ast.If):
             INDENT(indent)

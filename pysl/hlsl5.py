@@ -91,6 +91,8 @@ def entry_point_end(func: pysl.Function):
     write('\treturn {0};\n'.format(pysl.Language.SpecialAttribute.OUTPUT))
     write('}\n\n')
 
+def entry_point_ret(func: pysl.Function):
+    write('return output')
 
 def constant_buffer(cbuffer: pysl.ConstantBuffer):
     write('cbuffer {0}\n{{\n'.format(cbuffer.name))

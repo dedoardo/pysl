@@ -170,6 +170,8 @@ def entry_point_end(func: pysl.Function):
     write('}\n')
     write('#endif\n\n')
 
+def entry_point_ret(func: pysl.Function):
+    write('return')
 
 def constant_buffer(cbuffer: pysl.ConstantBuffer):
     write('layout(std140) uniform {0}\n{{\n'.format(cbuffer.name))
