@@ -1,6 +1,6 @@
 # PYSL: PY(thon) S(hading) L(anguage)
 
-**Note:**  Project in development, currently only Vertex and Pixel shaders are supported, more stages and features will come in the future.
+
 
 ## Table of Contents:
 - [Introduction](#introduction)
@@ -28,20 +28,20 @@
 
 ## Introduction
 ## What is it
-*PYSL* is a subset of [Python 3.6](https://www.python.org/about/) that is translatable to *HLSL* and *GLSL*. There is no special syntax, the code is **syntactically valid** Python. The specification contains a list of operators, decorators and tokens that are recognized by the compiler (`pyslc`). 
+*PYSL* is a subset of [Python 3.6](https://www.python.org/about/) that is translatable to *HLSL* and *GLSL*. There is no special syntax, the code is syntactically valid Python. The specification contains a list of operators, decorators and tokens that are recognized by the compiler (`pyslc`). 
 The code has to be valid python because the input file is parsed into an [AST](https://docs.python.org/3/library/ast.html) that is then traversed and written out as *HLSL*, *GLSL* or both. As the output is readable (blank lines are also preserved) later tweaks can and should be done if needed or possible. Current outputs are [**HLSL Shader Model 5**](https://msdn.microsoft.com/en-us/library/windows/desktop/ff471356(v=vs.85).aspx) and [**GLSL 4.5**](https://www.khronos.org/registry/OpenGL/specs/gl/GLSLangSpec.4.50.pdf).
 `pyslc` in addition to *HLSL* and *GLSL* allows to export metadata in *JSON* containing entry points, compile flags, resources and more custom data.  
 C++ headers can also be exported containing structure definitions made to match the layout of the one specified in the shader. 
 For more information see [Usage](#usage).
 
-##### Disclaimer
-This is not a full-fledged compiler. `pyslc` allows evaluation of the output (using `fxc` and `glsllangValidator`), but a correctly compiled *PYSL* script is **not guaranteed** to be a valid shader. If you try to access the `z` component of a 2D vector, it's easier to let the backend compiler complain. This does not mean that there is no type-checking and such, but it is strictly limited to what concerns *PYSL* specific features, nothing else.  
+
+This is not a full compiler. `pyslc` allows evaluation of the output (using `fxc` and `glsllangValidator`), but a correctly compiled *PYSL* script is **not guaranteed** to be a valid shader. If you try to access the `z` component of a 2D vector, it's easier to let the backend compiler complain. This does not mean that there is no type-checking and such, but it is strictly limited to what concerns *PYSL* specific features, nothing else.  
 *PYSL* has actually not that many special tokens and pretty much everything you need to know is contained inside this very README.  
 This is meant for people who already have some knowledge of a shading language, the documentation reflects this.  
 This is not the ultimate solution, it aims at saving **~50% of the work**. The extra time that might be required to tweak the output is made up by the less verbosity of python compared to C-like code.  
 Nonetheless the output is valid shader code and with some attention complex and valid shaders can be written and compiled directly.
 
-## Usage
+## Socumentation
 `pysl.py` is contained inside the root directory, all it really does is call `pysl/pyslc.py`.
 ```ruby
 usage: pysl.py [-h] [-ohlsl5 OHLSL5] [-oglsl45 OGLSL45] [-ojson OJSON]
@@ -64,7 +64,7 @@ optional arguments:
 
 ```
 
-## Language
+
 *PYSL* is heavily inspired to *HLSL*, thus if you are familiar with it you can pretty much start coding right away. The parts that are borrowed from *GLSL* are to make the compilation less painful.  
 Very often the translation of each part of the language is reported, to make it easier to locate and understand errors in compilation.
 Top-level = global scope
