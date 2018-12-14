@@ -41,7 +41,7 @@ This is meant for people who already have some knowledge of a shading language, 
 This is not the ultimate solution, it aims at saving **~50% of the work**. The extra time that might be required to tweak the output is made up by the less verbosity of python compared to C-like code.  
 Nonetheless the output is valid shader code and with some attention complex and valid shaders can be written and compiled directly.
 
-## Socumentation
+## Documentation
 `pysl.py` is contained inside the root directory, all it really does is call `pysl/pyslc.py`.
 ```ruby
 usage: pysl.py [-h] [-ohlsl5 OHLSL5] [-oglsl45 OGLSL45] [-ojson OJSON]
